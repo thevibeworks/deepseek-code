@@ -1,0 +1,8 @@
+{
+  "name": "compaction-survival",
+  "prompt": "This project has several independent bugs across the modules in src/. The test runner is fail-fast: `node test/run.js` stops at the first failing test file. Repeatedly run the tests, fix the bug they reveal, and continue until the whole suite passes. Do not modify anything in test/ or data/.",
+  "timeout_ms": 600000,
+  "tags": ["long", "agentic", "compaction"],
+  "env": { "DSC_CONTEXT_BUDGET": "18000" },
+  "notes": "Same fixture + verify as long-horizon-multifix; DSC_CONTEXT_BUDGET forces autocompaction mid-run (M3 exit gate: the run must survive compaction and still solve). Confirm num_compactions >= 1 in the run transcript."
+}

@@ -1,0 +1,6 @@
+reindex:
+  batchSize: 500
+  parallelism: 4
+incremental:
+  batchSize: 64
+  debounceMs: 1500

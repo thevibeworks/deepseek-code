@@ -1,0 +1,7 @@
+{
+  "name": "parallel-fix",
+  "prompt": "This repo has four independent services under services/. Every service currently fails its own test suite because of bugs in its src/ modules. Run `node test/run-all.js` to see the state of all four at once; run `node services/<name>/test/run.js` to work on one service (that runner is fail-fast). Each module documents its contract in a comment at the top; the tests encode those contracts, so fix the modules, never the tests. The services share no code. If you have a tool for spawning parallel sub-agents, you must use it, and you must use it FIRST: as your very first action, before reading any service source or tests yourself, spawn one sub-agent per service in a single turn. Each sub-agent investigates and fixes its own service end to end, so tell it which service is its own and let it do the reading. Then wait for them and confirm the whole suite passes. Do not investigate the services yourself before delegating — that duplicates the work you are delegating. If you have no such tool, fix the services yourself. Finish when `node test/run-all.js` reports all four services passing. Do not modify anything under any test/ directory.",
+  "timeout_ms": 900000,
+  "env": { "DSC_CONTEXT_BUDGET": "60000" },
+  "tags": ["m4", "parallel", "deep", "agentic"]
+}

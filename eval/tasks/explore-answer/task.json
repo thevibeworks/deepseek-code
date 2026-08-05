@@ -1,0 +1,6 @@
+{
+  "name": "explore-answer",
+  "prompt": "In this repo: what TCP port does the staging gateway actually listen on once all configuration layers are applied? Investigate the code to be sure. End your reply with just the port number on its own line.",
+  "timeout_ms": 240000,
+  "tags": ["quick", "explore"]
+}

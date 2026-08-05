@@ -1,0 +1,17 @@
+node_modules/
+*.db
+*.db-wal
+*.db-shm
+
+# Eval run artifacts: 4 MB+ of captured transcripts per matrix, full of
+# machine-local /tmp paths. runs.jsonl (the metrics rows) IS committed —
+# that is the auditable evidence behind BASELINE.md.
+eval/transcripts/
+
+# Devlog entries from M1-M3 are entangled with a private comparison
+# harness and are held back pending sanitization. See docs/devlog/README.md.
+docs/devlog/2026-08-03-core-frame-arch.org
+docs/devlog/2026-08-03-learning-round-3.org
+docs/devlog/2026-08-04-milestone-1.org
+docs/devlog/2026-08-05-m2-context-engine.org
+docs/devlog/2026-08-05-m3-sessions-compaction.org

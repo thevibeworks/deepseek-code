@@ -1,0 +1,6 @@
+{
+  "name": "bugfix-slugify",
+  "prompt": "The tests in this project are failing. Run `node test.js`, find the bug, fix it, and verify the tests pass. Do not modify test.js.",
+  "timeout_ms": 240000,
+  "tags": ["quick", "agentic"]
+}

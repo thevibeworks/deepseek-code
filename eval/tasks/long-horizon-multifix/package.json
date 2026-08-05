@@ -1,0 +1,6 @@
+{
+  "name": "long-horizon-multifix-taskdir",
+  "private": true,
+  "type": "commonjs",
+  "description": "CJS scope for gen.js/solution so the repo-root type:module does not apply. Not part of the fixture."
+}

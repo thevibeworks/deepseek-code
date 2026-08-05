@@ -1,0 +1,4 @@
+{
+  "extends": "production",
+  "logLevel": "debug"
+}

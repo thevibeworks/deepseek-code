@@ -1,0 +1,6 @@
+{
+  "name": "feature-tdd",
+  "prompt": "Implement duration.js in this project so that `node duration.test.js` passes. Read README.md for the spec. Do not modify duration.test.js.",
+  "timeout_ms": 240000,
+  "tags": ["quick", "agentic"]
+}

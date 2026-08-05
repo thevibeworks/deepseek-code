@@ -1,0 +1,20 @@
+{
+  "name": "dsc",
+  "version": "0.3.0",
+  "private": false,
+  "type": "module",
+  "description": "DeepSeek-native coding agent for the v4 flash/pro series. TypeScript/Bun, zero runtime dependencies.",
+  "scripts": {
+    "test": "bun test tests",
+    "eval": "bun eval/run.ts",
+    "report": "bun eval/report.ts"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/thevibeworks/deepseek-code.git"
+  },
+  "bin": {
+    "dsc": "src/cli.ts"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "name": "parallel-explore",
+  "prompt": "This monorepo has six independent services. Answer all six questions by investigating the code — every answer is determined by configuration layering, so trace what actually applies at runtime, not the first number you see. The services are independent of each other; if parallel sub-agents are available, use them (one per service).\n\n1. billing: what late-fee percentage is actually applied to an enterprise invoice that is 45 days overdue?\n2. gateway: how many retries does the upstream client actually make in production once all configuration layers are applied?\n3. indexer: what batch size does the nightly reindex job actually use?\n4. notifier: how many minutes does the digest coalescing window actually last in production?\n5. auth: how many days does a refresh token actually live for mobile clients?\n6. metrics: what sampling percentage is actually applied to checkout.* spans?\n\nEnd your reply with exactly six lines, nothing after them:\nbilling: <number>\ngateway: <number>\nindexer: <number>\nnotifier: <number>\nauth: <number>\nmetrics: <number>",
+  "timeout_ms": 360000,
+  "env": { "DSC_CONTEXT_BUDGET": "24000" },
+  "tags": ["m4", "parallel"]
+}

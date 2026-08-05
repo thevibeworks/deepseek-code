@@ -1,0 +1,10 @@
+{
+  "_comment": "On-call managed overrides. Deployed with every notifier release.",
+  "coalescing": {
+    "production": 25,
+    "staging": 10
+  },
+  "rateLimit": {
+    "production": 120
+  }
+}

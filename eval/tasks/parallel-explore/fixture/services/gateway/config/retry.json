@@ -1,0 +1,5 @@
+{
+  "maxRetries": 3,
+  "backoffMs": 200,
+  "comment": "Defaults only. Production overrides via env/production.env."
+}

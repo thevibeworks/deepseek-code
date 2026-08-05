@@ -1,0 +1,5 @@
+{
+  "name": "meridian",
+  "private": true,
+  "description": "Internal services monorepo: billing, gateway, indexer."
+}

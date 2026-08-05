@@ -1,0 +1,120 @@
+* [2026-08-04] Design review vs pi + ecosystem sweep -> Round 4 deltas  :ARCH:REFERENCE:
+
+User re-engaged after the autonomous M1 run with two asks: review
+DESIGN.md against pi best practices (DeepSeek-only focus), then keep
+learning — clone the pi repos fresh and build an awesome-pi-agent
+list under thevibeworks. This entry covers both; the design changes
+land as "Round 4 deltas" in DESIGN.md.
+
+** Tension
+
+DESIGN.md v2 + Round 3 was written from the pi-mono deep-dive
+(docs/research/pi-loop-tools-skills.md) but had never been read back
+as a whole after M1 shipped. Two risks: (a) contradictions between
+the body and the Round 3 amendments that an autonomous session could
+trip over — the doc IS the spec for /goal runs; (b) pi practices we
+noted in research but never promoted to design rules, which get
+expensive to retrofit once M2-M4 code exists.
+
+** Observation
+
+- The sharpest find: DESIGN.md says BOTH "/pro arms pro for the next
+  turn" (same-transcript model switch) AND "escalation passes a
+  compressed evidence packet, not the transcript". Different
+  mechanisms, different costs. Same-transcript switch = full prefix
+  cache miss repriced at pro input ($0.435/M vs $0.0028 cached flash;
+  ~$0.04 per escalation at 100k ctx) PLUS an unverified semantic:
+  nobody has shown /anthropic accepts flash-generated thinking blocks
+  replayed under pro. pi carries cross-model rewrite machinery
+  (thinking->text, ID normalization) precisely because this breaks.
+- Body/amendment contradiction: Tools section said "MCP client in
+  v1"; Round 3 amendment says MCP out of core. Round 3 wins; body
+  still carried the stale line.
+- Assembly table said agent loop is "vendor + adapt" (792-ln pi
+  loop); what M1 actually shipped is a 225-ln rewrite honoring the
+  contracts (src/engine/loop.ts). The contracts are the value, not
+  the code — table wording invited someone to "finish" the vendoring.
+- pi practices in research notes but NOT in design: tool-doc
+  co-location (promptSnippet/promptGuidelines on ToolDefinition,
+  prompt assembled deterministically from them); a NAMED
+  between-turns seam (prepareNextTurn/shouldStopAfterTurn) — which
+  M2 autocompact, budgets, steering, and /pro arming all need;
+  parallel-tool-batch policy (pi: parallel default, any sequential
+  tool forces whole batch sequential, end-events completion-order,
+  result messages source-order) — M1 loop is sequential and the
+  design was silent; bash STREAMING spill (pi OutputAccumulator:
+  rolling tail in memory, temp-file the moment limits are hit) vs
+  our post-hoc result spill.
+- Ecosystem sweep: pi's canonical repo MOVED to earendil-works/pi
+  (badlogic/pi-mono redirects; our reference/pi-mono is the stale
+  path). New packages: protocol, server, storage, client, and
+  *evals* — the last one directly relevant to our eval/ harness.
+  Cloned reference/pi (full history) + reference/pi-web. The prior
+  awesome list (qualisero, 1.1k stars) retired mid-2026 — clear
+  field. Swept ~150 candidates, API-verified all of them (3 dead, 8
+  archived, 2 moved — tracked to new homes), shipped 131 as
+  thevibeworks/awesome-pi-agent (CC0, lychee CI).
+
+** Decision
+
+- Fold review outcomes into DESIGN.md as Round 4 deltas + surgical
+  body fixes (MCP line, loop-table wording, protocol demotion,
+  extension non-goal). Rejected: full rewrite folding Rounds 3-4
+  into the body — more churn than value while the doc is actively
+  accreting; revisit at M3 when the delta stack gets tall.
+- Rule adopted: a session transcript is pinned to ONE model.
+  Crossing models = new context. This deletes pi's entire
+  cross-model replay layer from our scope — the concrete win of
+  being DeepSeek-only. /pro mechanism (same-transcript switch vs
+  evidence-packet/pro-subagent) stays an OPEN question, eval-gated,
+  decided by M4 where the pro-reviewer subagent makes the packet
+  route nearly free.
+- /anthropic demoted native protocol: /anthropic is THE protocol;
+  the OpenAI-style route gets built only when something forces it.
+  One stream state machine to keep correct instead of two.
+- No extension/plugin system in v1, stated in Non-goals. The event
+  log (which must project onto ACP anyway) is the extension surface.
+  pi's jiti extension layer is its most bloat-prone subsystem.
+- awesome-pi-agent built under thevibeworks as a REAL public
+  artifact, not a scratch file: mined the retired list's final
+  revision (~100 links), added ~40 the sweep found, dropped
+  dead/archived. Fun kept structural (Lore section, oh-my-pi Orbit,
+  Friends of pi) rather than decorative.
+
+** Tradeoff
+
+- Round-4-as-deltas keeps DESIGN.md append-heavy; a reader now
+  resolves body + two delta layers. Acceptable until M3, then fold.
+- Sequential tool execution stays until an eval shows the parallel
+  win; we defer the per-file mutation queue with it. If v4 emits
+  parallel batches often, we're leaving wall-clock on the table
+  through M2.
+- The awesome list is a maintenance commitment (weekly lychee run
+  will file failures). Mitigation: CONTRIBUTING bar + prune policy
+  written day one.
+- reference/pi-mono kept on disk (research docs cite its paths) but
+  it will silently stale — SOURCES.md Round 4 says all future dives
+  use reference/pi.
+
+** Next
+
+The live wire is unchanged from the M1 handoff: M2 needs the
+long-horizon eval task FIRST. But two cheap adds from this session:
+(1) skim earendil-works/pi packages/evals before building more of
+eval/ — if their harness shapes match ours, steal; (2) the /pro
+mechanism eval belongs on the M4 gate, not before. Design-wise, the
+between-turns seam is the only Round 4 item M2 directly depends on —
+name it in engine/ before writing reclaim/compaction logic.
+
+** Artifacts
+
+- DESIGN.md: Round 4 deltas appended; body fixes (MCP, loop table,
+  protocol, non-goals). This session, after this entry.
+- reference/pi (earendil-works/pi @ 588915ec7, 2026-08-04),
+  reference/pi-web (agegr/pi-web @ v0.8.6) cloned.
+- https://github.com/thevibeworks/awesome-pi-agent @ 1df538c —
+  131 repos, README + CONTRIBUTING + CC0 + lychee workflow.
+- SOURCES.md "Round 4" appended (canonical move, sweep, mining
+  targets: nicobailon/pi-subagents, pi-boomerang, pi-mcp-adapter,
+  earendil-works/pi-review-loop).
+- Verification data: /tmp/awesome-pi/verified.tsv (ephemeral).

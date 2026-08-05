@@ -1,0 +1,6 @@
+{
+  "name": "meridian-services",
+  "private": true,
+  "scripts": { "test": "node test/run-all.js" },
+  "description": "Four independent services, each with its own test suite."
+}

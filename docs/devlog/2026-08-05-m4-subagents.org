@@ -1,0 +1,255 @@
+#+TITLE: M4: sub-agents — task tool, roles, budgets; the delegation-policy finding; the task-pin compaction fix
+#+DATE: 2026-08-05
+
+* Tension
+
+DESIGN.md pillar 3 promises spawn/wait/result/cancel sub-agents with
+roles and budget envelopes, exit-gated on "parallel exploration beats
+single-agent wall-clock at comparable cost". The gate wording assumes
+parallelism is where the win lives. Building it showed the win lives
+somewhere else.
+
+* What shipped
+
+- src/engine/subagent.ts: ROLES (explorer / implementer / reviewer /
+  tester) as tool-subset + model + preamble + budget presets.
+  SubagentManager: spawn (non-blocking, children run concurrently),
+  wait, get, cancel, cancelAll, totalUsage. Budget envelope = max
+  turns (runLoop maxTurns), max total tokens (turn_end watcher +
+  abort), max wall-clock (timer + abort). A budget-killed child
+  reports status "partial" with killedBy; the parent decides what to
+  do with the partial report. MAX_CHILDREN = 8 per run.
+- src/tools/task.ts: ONE tool with an action enum (DeepSeek-TUI's
+  tasks-tool shape, reduced). One tool = one line in the prompt index;
+  lifecycle verbs are arguments. Factory over the manager — the only
+  tool with per-run state.
+- Role flavor rides in the child's USER prompt, not its system
+  prompt: children with the same toolset share one byte-identical
+  stable prefix, so the prefix cache pays across sibling explorers.
+- Depth 1 enforced by construction: children never get the task tool.
+- Model pinning per role (Round 4 rule #1): reviewer = fresh pro
+  context, never a mid-transcript switch.
+- CLI: task tool default-on for the parent; --no-subagents /
+  DSC_NO_SUBAGENTS=1 is the ablation arm. Children persist as
+  sessions (id "<parent>.tN") when --save is on. Reported usage
+  totals INCLUDE child usage — cost comparisons lie otherwise.
+  num_subagents in JSON output.
+- Prompt golden now freezes TWO prompts: the 4-tool child/solo prompt
+  (unchanged bytes) and the 5-tool parent prompt.
+
+* Finding 1: flash does not delegate, and at small scale it is right
+
+parallel-explore (6 independent config-layering questions across 6
+services), uncapped context:
+
+- solo: 17-19s, ~24k tokens, 6/6 correct, zero spawns — flash
+  batch-greps whole services in a few turns.
+- forced 6-way fan-out (explicit instruction): 39s, ~133k tokens,
+  6/6 correct, all 6 children parallel and correct.
+
+Two facts fell out. (a) The machinery works end-to-end under the real
+API. (b) Fan-out LOSES 2x wall and ~4x tokens at this scale: within-
+turn tool batching already is parallelism, and each child pays its own
+system prompt + multi-turn loop + report. A directive prompt guideline
+("do not work through them one by one...") did not change flash's
+choice; it still went solo. The delegation-policy question (when does
+the model reach for the tool spontaneously?) is now a separate,
+documented open item — the mechanism eval must not silently depend on
+it, so the eval prompt says "if parallel sub-agents are available, use
+them (one per service)" and the arms differ only in tool availability.
+
+Consequence for the gate: the honest value claim is DESIGN.md's own
+"bounded sub-contexts beat one giant context", measured by running the
+same task under a tight context budget (M3's lever): the solo arm must
+compact repeatedly; the fan-out parent stays small and children stay
+bounded. Wall-clock and success under that regime are the gate.
+
+* Finding 2 (the expensive one): compaction lost the task
+
+First gate probe at DSC_CONTEXT_BUDGET=18000: BOTH arms timed out at
+360s. Verbose repro showed the failure in one line — after the second
+compaction the agent ran:
+
+  find . -iname '*task*' -o -iname '*question*' -o -iname '*prompt*'
+
+It was searching the filesystem for its own task. Chain: emergency
+summary clips user asks at 500 chars (the 6-question prompt is ~1.2k —
+questions 3-6 gone); LLM summary-of-summary erodes the rest
+(telephone); post-compaction the agent wanders, wandering refills
+context, context re-trips the (5k) threshold, livelock. M3's
+compaction-survival eval never caught this because multifix carries
+small per-step content and its summaries happened to keep the goal.
+
+Fix (three parts, all in src/):
+1. Task pin: the compacted view's first message is now summary FIRST,
+   then the run's task prompt VERBATIM (recency position). Summaries
+   may erode; the pin cannot. Stored in CompactionRecord.task so
+   rebuildView reproduces the same view. One user message, not two —
+   consecutive same-role messages are not assumed safe on the wire.
+2. readSeen.clear() on compaction: a post-compaction re-read must
+   return content, not "[identical content elided — scroll up]"
+   pointing at a read that no longer exists in the view.
+3. Summary cap scaled to threshold (min(4096, threshold/4), floor
+   512): a 4k-token summary defeats an 18k-budget compaction by
+   construction — the post-compact view instantly re-trips.
+
+Also moved the eval to DSC_CONTEXT_BUDGET=24000: threshold 5k (18k
+budget) leaves ~1k of tail — a livelock regime no engine fix makes
+productive for a read-heavy task; threshold 11k is tight-but-livable.
+
+* Tradeoffs taken
+
+- Bash in "read-only" roles is advisory (tool subset is the
+  permission; no sandbox). Documented, deliberate, minimum viable.
+- No spawn-time budget overrides: role presets only. No config
+  without a user who needed it.
+- Sequential tool execution stays (Round 4 #5): spawn is instant, so
+  parallelism comes from children running between turns, not from
+  parallel tool execution.
+- Guideline strengthened once (eval-gated prompt change) even though
+  it did not flip flash's delegation choice — it is the right
+  instruction for bigger models and costs ~40 tokens in the parent
+  prefix only.
+
+* Finding 3: the first fixture could not measure the claim
+
+At 24k budget on the original fixture BOTH arms passed with ZERO
+compactions (solo 21.6s/$0.0016, dsc 18.5s/$0.0014, and dsc spawned
+nothing). A gate where neither arm experiences the pressure it is
+supposed to measure is not a gate — it is two runs of the same easy
+task.
+
+Root cause: 11.5 KB across 6 services (3 files each) is not a service
+repo, it is a diagram of one. ~3k tokens total never approaches an 11k
+threshold no matter how the agent explores.
+
+Fixed by bulking the fixture to 77 KB / 12 files per service via a
+checked-in generator (eval/tasks/parallel-explore/gen-bulk.ts):
+ordinary infrastructure per service (validators, serializer,
+pagination, errors, repository, handlers, migrations, health). The
+generator asserts generated bytes never contain the answer vocabulary
+or the answer numbers (FORBIDDEN regex, throws on hit) — bulk must
+read as plumbing to skim past, never as evidence to weigh. Answer
+chains stay hand-written and unchanged; all six still compute
+(4.5/7/256/25/21/12.5) and all 48 generated modules `require` clean.
+
+The honesty question this raises, recorded deliberately: is sizing the
+fixture until fan-out can win rigging the eval? The defensible line is
+that 3-files-per-service was the unrealistic artifact and ~12 is
+ordinary, so the change moves TOWARD reality rather than toward a
+preferred answer. The check on that claim is that BOTH regimes get
+reported — small-fixture (solo wins outright) and realistic-fixture
+(measured below) — not just the flattering one.
+
+* Results on the SHALLOW task: the gate failed there
+  (superseded in scope by Finding 4 — read both. This section is
+  correct about parallel-explore and wrong as a general verdict.)
+
+parallel-explore, 77 KB fixture, DSC_CONTEXT_BUDGET=24000, n=4/arm:
+
+| arm        | success | wall med | tokens med | $/solve med |
+|------------+---------+----------+------------+-------------|
+| solo       | 4/4     | 22.3s    | 47,887     | 0.0020      |
+| fan-out(6) | 4/4     | 55.5s    | 248,158    | 0.0133      |
+
+2.49x slower, 6.75x more expensive, identical success. Every single
+fan-out run was worse than every single solo run on both axes. Gate
+recorded as NOT MET; not retuned until it passed.
+
+Why, structurally: per-child fixed overhead (own system prefix +
+multi-turn loop + report) is ~8k tokens against ~3.5k tokens of actual
+per-child work. Overhead > work means fan-out CANNOT win on this task
+shape — no amount of prompt or budget tuning changes that arithmetic.
+
+The prediction that motivated bulking was also wrong, and worth
+recording because it was wrong in an instructive direction: I expected
+a bigger fixture to pressure the SOLO arm into compacting. It never
+compacted (0/4). A competent agent greps rather than reading whole
+services, so fixture bytes never become parent context pressure. The
+arm that compacted was the FAN-OUT parent, carrying six reports. Bulk
+inflates the delegating arm, not the solo one.
+
+* Decision: sub-agents ship OPT-IN
+
+--subagents / $DSC_SUBAGENTS=1. Default tool set stays the M1 four, so
+the default system prompt is byte-identical to the M1-gated prefix
+(asserted) — zero cache impact, no re-gate for existing tasks. The
+capability is complete and tested; it is simply not earned as a
+default by any number we have.
+
+The claim is deliberately narrow: fan-out loses on SHALLOW independent
+lookups. Deep independent subtasks (per-child work >> per-child
+overhead) are untested, and that is the one experiment that could
+still justify the pillar. Declaring pillar 3 dead off one task shape
+would be overclaiming in the other direction.
+
+eval/adapters: dsc-solo.ts deleted, dsc-fanout.ts added (sets
+DSC_SUBAGENTS=1). Plain `dsc` is now the default path, which makes the
+historical "dsc-solo" rows directly comparable to it — noted in
+BASELINE.md so the adapter rename does not orphan the history.
+
+* Finding 4: the deep-subtask eval RAN, and it overturns Finding 1
+
+Built parallel-fix (4 independent services, 8 real contract bugs, own
+suite each, cross-service runner reporting all four at once so the task
+is not sequential by construction). Fixture validated three ways before
+spending a dollar: unfixed fails, reference fixes pass, and gutting a
+test to force a pass still fails. One near-miss caught there: the
+ledger tolerance fix initially needed a float-epsilon guard, which
+would have turned an inclusive-boundary bug into a floating-point
+puzzle. Confirmed the natural `<` -> `<=` fix passes; guard removed.
+
+Three prompt regimes, n=3/arm. The SPREAD between them is the finding:
+
+| regime                        | solo wall | fanout wall | fanout cost | spawn turn |
+|-------------------------------+-----------+-------------+-------------+------------|
+| A delegate FIRST              | 66.8s     | 51.2s       | 1.67x       | 2          |
+| B "use sub-agents" (no first) | 112.3s    | 233.2s      | 1.76x       | ~10        |
+| C neutral, no mention         | 62.4s     | 77.7s       | ~1.0x       | never      |
+
+In A fan-out is 1.30x FASTER than solo: the M4 wall-clock gate is MET
+under those conditions, at a +67% cost premium ($0.0029/solve absolute).
+In B — same mechanism, same fixture, instruction differing only in WHEN
+to delegate — fan-out is 2.08x SLOWER. The parent spent 9 turns reading
+all four services, then delegated fixes to children who re-read
+everything. The context is paid for twice.
+
+Delegation TIMING is the dominant variable. Not parallelism, not role
+design, not budget envelopes. Before believing B I checked the
+mechanism was not at fault: transcripts show 4 spawns in ONE turn
+followed by a single wait, so children genuinely run concurrently.
+
+So Finding 1's "flash is right to refuse" was only half right. Flash is
+right to refuse LATE delegation — which is the only kind it produces on
+its own. parallel-explore's 6.75x blowout was the shallow end of this
+same curve, not a separate phenomenon.
+
+* Decision revisited: still OPT-IN, for a different reason
+
+Regime C decides the default: with the task tool present AND a
+guideline explicitly saying "delegate BEFORE you investigate", flash
+spawned NOTHING in 3/3 runs, and cost sat within noise of solo.
+
+The original reason for opt-in was "default-on ships losing behavior".
+C shows that is wrong — default-on would be INERT, not harmful, because
+flash never reaches for the tool. The honest reason is now: it buys
+nothing the model will use autonomously. The value is real but only
+reachable by a CALLER who knows their task decomposes and says so.
+Same decision, corrected reasoning. The guideline rewrite stays: ~90
+prefix tokens on the opt-in path only, and it is the right instruction
+for any model that does delegate.
+
+* Next
+
+- Sub-agents are a caller-driven feature, not an autonomous one. If
+  that should change, the lever is NOT prompt wording (tried twice,
+  failed twice) — it is structural: the harness detecting an N-way
+  independent decomposition and pre-spawning, or exposing delegation as
+  an explicit user-facing mode.
+- /pro mechanism decision (Round 4 #2) — the reviewer role's
+  evidence-packet path exists now; needs its eval. Note the M4 result
+  makes the "nearly free pro-reviewer sub-agent" premise in Round 4 #2
+  suspect: a pro child costs a full fresh context at pro rates.
+- Multi-run reclaim eval (M2's still-unclaimed exit).
+- Regression watch: the compaction task-pin changed the compacted view
+  bytes. compaction-survival re-run after the change (see BASELINE).

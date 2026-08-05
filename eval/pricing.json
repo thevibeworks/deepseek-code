@@ -1,0 +1,9 @@
+{
+  "source": "thevibeworks/deepseek-docs content/en/quick_start/pricing.md (fetched 2026-08-02)",
+  "unit": "USD per 1M tokens, regular (off-peak) rates",
+  "note": "DeepSeek announced a coming peak-hour policy: 2x all items during 9:00-12:00 and 14:00-18:00 Beijing time. Not yet in effect; runs.jsonl rows record regular-rate cost only. Re-check the pricing doc before trusting absolute dollar figures.",
+  "models": {
+    "deepseek-v4-flash": { "input_hit": 0.0028, "input_miss": 0.14, "output": 0.28 },
+    "deepseek-v4-pro": { "input_hit": 0.003625, "input_miss": 0.435, "output": 0.87 }
+  }
+}

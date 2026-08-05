@@ -1,0 +1,6 @@
+{
+  "name": "gatekeeper",
+  "version": "3.2.1",
+  "private": true,
+  "main": "src/server.js"
+}

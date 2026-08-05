@@ -1,0 +1,7 @@
+{
+  "host": "127.0.0.1",
+  "port": 8080,
+  "logLevel": "info",
+  "requestTimeoutMs": 30000,
+  "maxBodyBytes": 1048576
+}

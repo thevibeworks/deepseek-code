@@ -285,6 +285,10 @@ done right).
    canvas, so this landed as a line-based interactive mode with no TUI
    dependency (pi-tui not adopted; see
    docs/devlog/2026-08-05-m5-interactive.org). /pro still open.
+   `/seek` (parallel investigation) landed on top of it as the explicit
+   delegation mode M4 asked for — see docs/devlog/2026-08-05-m6-seek.org,
+   including the measurement that it costs wall-clock rather than saving
+   it.
 6. Scheduler (`dsc serve`, cron + watch, decision-file pattern, ps).
 7. Skills + MCP client.
 

@@ -61,6 +61,12 @@ export class Session {
     }
   }
 
+  /** The current context view. Read-only by contract: the loop owns this
+   * array and appends to it in place, so callers must not mutate it. */
+  viewMessages(): readonly Message[] {
+    return this.view;
+  }
+
   /** Estimated size of the current context view, in tokens. */
   contextTokens(): number {
     return this.view.length === 0 ? 0 : estimateTokens(JSON.stringify(this.view));

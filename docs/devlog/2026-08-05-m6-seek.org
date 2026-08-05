@@ -1,0 +1,131 @@
+#+TITLE: /seek — turning the M4 finding into a command, and measuring that it does not buy speed
+#+DATE: 2026-08-05
+
+* Tension
+
+M4 left a specific dead end. Sub-agents win on deep independent work, but
+only when the parent delegates BEFORE investigating (regime A: 1.30x
+faster; regime B, same mechanism after the parent read the material:
+2.08x SLOWER). And flash never chooses regime A on its own — with the
+task tool present AND a guideline saying "delegate before investigating",
+it spawned nothing in 3/3 runs. The conclusion recorded then:
+
+  the lever is NOT prompt wording (tried twice, failed twice) — it is
+  structural: harness-detected N-way decomposition with pre-spawn, or an
+  explicit user-facing delegation mode.
+
+/seek is that explicit mode. The harness plans the split and pre-spawns,
+which puts every invocation in regime A by construction.
+
+* What shipped
+
+- src/ui/seek.ts: planSeek (one tool-less call returning a JSON plan),
+  workspaceOutline, and the synthesis prompt. Guards live in toPlan.
+- Repl./seek: plan -> spawn one explorer per piece in a single turn ->
+  wait per-child (completions render as they land) -> synthesize.
+- No new tool, so the system prompt is untouched and the M1-gated bytes
+  still hold. /seek works without --subagents: the task TOOL stays
+  opt-in, while /seek drives the same manager from the frontend.
+- SubagentManager is now built per RUN, not per process. MAX_CHILDREN is
+  documented as a per-run limit; one long-lived manager silently made it
+  per-session, so after eight children an interactive session could never
+  fan out again.
+
+* The guard rail is the feature
+
+Fan-out on shallow lookups measured 2.49x wall and 6.75x cost. So an
+unparseable, ambiguous, or single-piece plan MUST fall back to answering
+inline: failing open (fanning out when unsure) is the expensive
+direction. tests/seek.test.ts pins that every malformed shape fails
+closed.
+
+Live, the discrimination works: "what does services/auth/config.js
+export?" -> inline; "how does the gateway retry policy work?" -> inline,
+with the reason "splitting it would require agents to share context and
+sequential findings"; "across all six services, how is configuration
+layered?" -> a 6-way split naming real paths.
+
+* Finding 1: a planner with no map refuses to plan
+
+First live attempt refused to split the six-service question. The reason
+it gave was the bug report: "The six services are not enumerated."
+
+Each piece's prompt has to be self-contained — children see none of the
+conversation — but the planner had never seen the repo, so it could not
+name `services/auth` and honestly declined. Fixed by passing a bounded
+workspace outline (depth 3, 200 entries, dependency dirs skipped).
+
+That is orientation, not investigation: a directory listing is the map,
+not the territory, so it does not recreate regime B.
+
+* Finding 2: reasoning tokens ate the plan
+
+After the outline fix it still refused intermittently, reporting "could
+not plan a split" — the fallback for JSON that did not parse.
+
+Reasoning is billed against max_tokens on this provider. Measured at the
+original 2048 cap, four identical calls:
+
+| max_tokens | stop     | output | thinking chars | text chars | parses |
+|------------+----------+--------+----------------+------------+--------|
+|       2048 | end_turn |   1916 |           3287 |       5727 | yes    |
+|       2048 | length   |   2048 |           9750 |          0 | NO     |
+|       8192 | end_turn |   1780 |           2069 |       5909 | yes    |
+|       8192 | end_turn |   2378 |           5585 |       5066 | yes    |
+
+One call in four produced ZERO text — and a truncated plan then looked
+exactly like a considered refusal to split. Fixed with an 8192 cap, one
+retry on truncation, and a distinct reason string ("the plan came back
+truncated") so the two cases can never again be confused. 6/6 reliable
+after. Same family as the Go sibling's empty-thinking trap.
+
+* Finding 3: /seek does NOT make investigation faster
+
+The honest headline. Two measured comparisons, n=1 each, indicative only:
+
+| question                        | mode  | wall   | input | output | cost    |
+|---------------------------------+-------+--------+-------+--------+---------|
+| 6-service config layering        | solo  | 33.0s  | 48k   | 3.7k   | $0.0024 |
+| (parallel-explore fixture)       | /seek | 96.7s  | 327k  | 27.3k  | $0.0200 |
+| token accounting audit           | solo  | 70.2s  | 368k  | 7.4k   | $0.0094 |
+| (dsc's own src/, 5k lines)       | /seek | 97.5s  | 275k  | 16.5k  | $0.0105 |
+
+Both slower. The shallow fixture reproduced parallel-explore's published
+ratios almost exactly (2.9x wall, 8.3x cost vs the pinned 2.49x/6.75x),
+which is a good sign the harness is measuring what it did before.
+
+The deep case is the interesting one, and it moved once. Initially it ran
+102.3s because the SYNTHESIS turn took 9 further turns re-reading files
+the reports already covered — regime B, relocated from before the
+delegation to after it. Banning re-investigation in the synthesis prompt
+took the parent to 1 turn and 0 tool calls, but total wall only fell to
+97.5s: the serial chain is planning (~20s) + slowest child (~31s) +
+synthesis (~46s), and no amount of parallelism compresses that below a
+single agent that greps well.
+
+So the M4 gate wording — "beats single-agent wall-clock" — is NOT met by
+/seek, and claiming otherwise would be the same folklore M5 just removed
+about the prefix cache. What /seek actually buys:
+
+- ~30% fewer parent input tokens on the deep case (275k vs 368k), because
+  the parent never reads the material.
+- N independent deep dives, each with its own full context budget. One
+  agent auditing six services shares one budget; six agents do not.
+- Coverage that survives scale: the solo answer was 7.4k output, /seek's
+  16.5k with every key symbol cited.
+
+It is a thoroughness and context-scaling tool, not a speed tool. Reach
+for it when one context cannot hold the work, not when you are in a
+hurry.
+
+* Open
+
+- Planning is ~20s of pure serial overhead before any work starts, most
+  of it reasoning. Capping planner reasoning is the obvious next lever.
+- No eval task covers /seek. Both numbers above are n=1 and the handoff's
+  standing warning applies: do not trust n<6 as a rate estimate. The
+  direction (slower) is consistent across two very different fixtures, so
+  it is believable; the ratios are not.
+- The explorer role is read-only, so /seek investigates but never fixes.
+  A /seek that dispatches implementers is the parallel-fix shape, which
+  is where regime A actually won 1.30x — untested here.

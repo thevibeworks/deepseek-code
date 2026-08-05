@@ -145,44 +145,55 @@ if (interactive || save || resumeId !== undefined) {
   sessionId = s.meta.id;
 }
 
-const manager = new SubagentManager({
-  apiKey,
-  baseUrl,
-  cwd,
-  contextBudget,
-  ...(store !== undefined
-    ? {
-        persist: (childId: string, childModel: string) => {
-          const meta = store!.create(childModel, cwd, `${sessionId}.${childId}`);
-          return {
-            sessionId: meta.id,
-            onMessage: (m: any) => store!.appendMessage(meta.id, m),
-          };
-        },
-      }
-    : {}),
-  ...(verbose
-    ? {
-        onLifecycle: (rec: any, phase: string) =>
-          process.stderr.write(
-            phase === "spawn"
-              ? `\n[task ${rec.id}] spawned (${rec.role})\n`
-              : `\n[task ${rec.id}] ${rec.status} (${rec.turns} turns, ${Math.round(rec.wallMs / 1000)}s)\n`,
-          ),
-      }
-    : {}),
-});
+// A manager is per RUN, not per process: MAX_CHILDREN is a per-run limit,
+// and interactive mode does many runs. `-p` makes exactly one.
+let runOrdinal = 0;
+const makeManager = (): SubagentManager => {
+  const run = ++runOrdinal;
+  return new SubagentManager({
+    apiKey,
+    baseUrl,
+    cwd,
+    contextBudget,
+    ...(store !== undefined
+      ? {
+          // Child ids restart at t1 every run, so the run ordinal keeps
+          // stored child session ids unique across an interactive session.
+          persist: (childId: string, childModel: string) => {
+            const meta = store!.create(childModel, cwd, `${sessionId}.r${run}${childId}`);
+            return {
+              sessionId: meta.id,
+              onMessage: (m: any) => store!.appendMessage(meta.id, m),
+            };
+          },
+        }
+      : {}),
+    ...(verbose
+      ? {
+          onLifecycle: (rec: any, phase: string) =>
+            process.stderr.write(
+              phase === "spawn"
+                ? `\n[task ${rec.id}] spawned (${rec.role})\n`
+                : `\n[task ${rec.id}] ${rec.status} (${rec.turns} turns, ${Math.round(rec.wallMs / 1000)}s)\n`,
+            ),
+        }
+      : {}),
+  });
+};
 
-const tools = subagents
-  ? [readTool, bashTool, editTool, writeTool, makeTaskTool(manager)]
-  : [readTool, bashTool, editTool, writeTool];
+// The task TOOL stays opt-in (it changes the prompt); /seek drives the
+// same machinery from the frontend, so it needs no tool and no re-gate.
+const makeTools = (mgr: SubagentManager) =>
+  subagents
+    ? [readTool, bashTool, editTool, writeTool, makeTaskTool(mgr)]
+    : [readTool, bashTool, editTool, writeTool];
 
 if (interactive) {
   const code = await runRepl({
     store: store!,
     session: session!,
-    manager,
-    tools,
+    makeManager,
+    makeTools,
     model,
     cwd,
     apiKey,
@@ -191,18 +202,19 @@ if (interactive) {
     contextBudget,
     thinking: hasFlag("thinking"),
   });
-  manager.cancelAll();
-  await manager.wait();
+  // The REPL owns a manager per turn and drains it there; nothing of its
+  // own is left running at this point.
   store!.close();
   process.exit(code);
 }
 
+const manager = makeManager();
 const runOpts = {
   model,
   cwd,
   apiKey,
   baseUrl,
-  tools,
+  tools: makeTools(manager),
   maxTurns,
   contextBudget,
   onEvent: verbose

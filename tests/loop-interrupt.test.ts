@@ -83,24 +83,25 @@ function unpairedToolUses(messages: Message[]): string[] {
 }
 
 describe("interrupting a run", () => {
-  test("aborting mid-batch still pairs every tool call, and returns fast", async () => {
+  test("aborting mid-batch still pairs every tool call", async () => {
     const ac = new AbortController();
-    // Anchored to the event, not a timer: a fixed delay can land during
-    // streaming instead of during tool execution and silently test
-    // nothing. Abort once the first (20s) command is actually running.
-    const t0 = Date.now();
+    // Abort SYNCHRONOUSLY on the tool event, with no timer involved.
+    // Earlier versions used a delay and were flaky two different ways:
+    // a fixed 400ms delay could land during streaming and silently test
+    // nothing, and a timer-based one got starved under `bun test`'s
+    // concurrent files long enough for two whole 20s turns to elapse.
+    // Wall-clock belongs in tests/bash-kill.test.ts, which owns the kill
+    // path; what this file owns is the pairing invariant.
     const result = await runLoop({
       ...base,
       prompt: "go",
       signal: ac.signal,
       onEvent: (e) => {
-        if (e.type === "tool_execution_start" && e.id === "call_a") setTimeout(() => ac.abort(), 100);
+        if (e.type === "tool_execution_start" && e.id === "call_a") ac.abort();
       },
     });
-    const elapsed = Date.now() - t0;
 
     expect(result.endReason).toBe("aborted");
-    expect(elapsed).toBeLessThan(8_000);
     expect(unpairedToolUses(result.messages)).toEqual([]);
 
     // The second call never ran, but is still answered.
@@ -114,7 +115,7 @@ describe("interrupting a run", () => {
 
   test("the interrupted view is a valid prefix for the next prompt", async () => {
     const abortOnFirstTool = (ac: AbortController) => (e: { type: string }) => {
-      if (e.type === "tool_execution_start") setTimeout(() => ac.abort(), 100);
+      if (e.type === "tool_execution_start") ac.abort();
     };
     const ac = new AbortController();
     const messages: Message[] = [];

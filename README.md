@@ -27,8 +27,13 @@ bun src/cli.ts -p "fix the failing test in src/parse.js"   # one shot
 Interactive is the default. Sessions are on automatically there, so
 `--continue` picks up where the last one in this directory left off.
 Ctrl-C interrupts a turn without losing the session; Ctrl-D leaves.
-Commands: `/help /status /cost /model /compact /clear /sessions /resume
-/thinking /exit`.
+Commands: `/help /seek /status /cost /model /compact /clear /sessions
+/resume /thinking /exit`.
+
+`/seek <question>` investigates in parallel: it plans a split, spawns one
+sub-agent per piece *before* reading anything itself, then synthesizes
+the reports. It refuses to fan out when a question is not genuinely
+decomposable — read the numbers below before reaching for it.
 
 Piped input works too, which makes scripted multi-turn runs easy:
 
@@ -119,6 +124,22 @@ them on its own — with the tool present *and* a guideline explicitly
 telling it to delegate before investigating, it spawned nothing in 3/3
 runs. Delegation is a caller-driven feature here, not an autonomous
 behavior. Full numbers: `eval/BASELINE.md`, section `parallel-fix`.
+
+**`/seek` does not make investigation faster.** It is the explicit
+delegation mode M4 concluded was needed, and it works — but measured
+against a single agent on the same question, twice, it lost on
+wall-clock both times (33.0s → 96.7s on a shallow six-service fixture;
+70.2s → 97.5s on a deep audit of this repo's own source). Fan-out cannot
+compress the serial chain of plan → slowest child → synthesize below what
+one agent that greps well already does.
+
+What it does buy is thoroughness and context scaling: ~30% fewer input
+tokens for the parent on the deep case, and N independent investigations
+each with a full context budget rather than six services sharing one.
+Reach for it when a question is too big for one context, not when you are
+in a hurry. Both measurements are n=1 and indicative only;
+`docs/devlog/2026-08-05-m6-seek.org` has the full numbers and the two
+bugs found getting there.
 
 **Interactive mode does not save you tokens.** The premise it was built
 on — "one process keeps the prefix cache warm" — is false: the cache is

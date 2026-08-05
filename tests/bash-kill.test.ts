@@ -19,7 +19,9 @@ describe("bash cancellation", () => {
     const elapsed = Date.now() - t0;
     expect(r.isError).toBe(true);
     expect(r.output).toContain("timed out");
-    expect(elapsed).toBeLessThan(5_000);
+    // The bug this guards took the grandchild's FULL 20s. A wide bound
+    // still separates the two cleanly and survives a loaded CI box.
+    expect(elapsed).toBeLessThan(10_000);
   }, 30_000);
 
   test("abort signal kills the whole tree", async () => {
@@ -33,7 +35,9 @@ describe("bash cancellation", () => {
     const elapsed = Date.now() - t0;
     expect(r.isError).toBe(true);
     expect(r.output).toContain("Interrupted");
-    expect(elapsed).toBeLessThan(5_000);
+    // The bug this guards took the grandchild's FULL 20s. A wide bound
+    // still separates the two cleanly and survives a loaded CI box.
+    expect(elapsed).toBeLessThan(10_000);
   }, 30_000);
 
   test("an already-aborted signal never starts real work", async () => {

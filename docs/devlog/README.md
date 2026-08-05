@@ -19,6 +19,11 @@ Entries present here:
   opposite directions), a `kill` bug that had been quietly breaking
   command timeouts all along, and the token-cost premise for the whole
   milestone turning out to be false.
+- `2026-08-05-m6-seek.org` — `/seek`, the explicit delegation mode M4
+  said was the missing structural lever. Two bugs worth reading (a
+  planner that refused because it had never seen the repo; reasoning
+  tokens silently eating the plan and looking like a refusal), and the
+  measurement that it does not buy speed.
 
 Entries for M1-M3 are held back for now: they are written around a
 private comparison harness (a proprietary agent CLI retargeted to

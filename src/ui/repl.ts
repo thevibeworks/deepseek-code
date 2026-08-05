@@ -24,13 +24,14 @@
 // History is carried across interfaces by hand.
 
 import { createInterface, type Interface } from "node:readline";
-import { addUsage, zeroUsage, type Usage } from "../provider/types";
+import { addUsage, zeroUsage, type Message, type Usage } from "../provider/types";
 import { compactThreshold } from "../engine/compact";
 import { MODELS } from "../provider/catalog";
-import type { SubagentManager } from "../engine/subagent";
+import { renderReport, type SubagentManager } from "../engine/subagent";
 import type { ToolDefinition } from "../tools/index";
 import { Session } from "../session/session";
 import type { SessionStore } from "../session/store";
+import { planSeek, synthesisPrompt } from "./seek";
 import {
   colorEnabled,
   costUsd,
@@ -45,8 +46,13 @@ import {
 export type ReplOptions = {
   store: SessionStore;
   session: Session;
-  manager: SubagentManager;
-  tools: ToolDefinition[];
+  /** A FRESH manager per run. MAX_CHILDREN is a per-run limit, and one
+   * long-lived manager would quietly turn it into a per-session one —
+   * after eight children an interactive session could never fan out
+   * again. A new manager per turn also makes child usage exact without
+   * differencing cumulative totals. */
+  makeManager: () => SubagentManager;
+  makeTools: (mgr: SubagentManager) => ToolDefinition[];
   model: string;
   cwd: string;
   apiKey: string;
@@ -59,6 +65,7 @@ export type ReplOptions = {
 
 const COMMANDS: [string, string][] = [
   ["/help", "show this list"],
+  ["/seek <question>", "investigate in parallel with sub-agents"],
   ["/status", "model, session, context use, cost"],
   ["/cost", "usage and cost so far"],
   ["/model [name]", "show or switch model"],
@@ -195,7 +202,7 @@ export class Repl {
     };
   }
 
-  private async turn(prompt: string): Promise<void> {
+  private async turn(prompt: string, extraUsage?: Usage, extraWallMs = 0): Promise<void> {
     const { dim, red } = this.palette;
     const ac = new AbortController();
     let interrupted = false;
@@ -211,7 +218,7 @@ export class Repl {
       thinking: this.thinking,
       ticker: this.tty,
     });
-    const childrenBefore = this.opts.manager.totalUsage();
+    const manager = this.opts.makeManager();
     const t0 = Date.now();
 
     try {
@@ -220,7 +227,7 @@ export class Repl {
         cwd: this.opts.cwd,
         apiKey: this.opts.apiKey,
         baseUrl: this.opts.baseUrl,
-        tools: this.opts.tools,
+        tools: this.opts.makeTools(manager),
         maxTurns: this.opts.maxTurns,
         contextBudget: this.opts.contextBudget,
         signal: ac.signal,
@@ -230,10 +237,9 @@ export class Repl {
 
       // Children never outlive the run that spawned them; their usage is
       // still counted, or the cost line understates what the turn cost.
-      this.opts.manager.cancelAll();
-      await this.opts.manager.wait();
-      const childDelta = subUsage(this.opts.manager.totalUsage(), childrenBefore);
-      const turnUsage = addUsage(result.usage, childDelta);
+      manager.cancelAll();
+      await manager.wait();
+      const turnUsage = addUsage(addUsage(result.usage, manager.totalUsage()), extraUsage ?? zeroUsage());
       this.usage = addUsage(this.usage, turnUsage);
 
       if (result.endReason === "aborted") {
@@ -243,10 +249,114 @@ export class Repl {
       } else if (result.endReason === "max_turns") {
         this.write(dim(`  stopped at the ${this.opts.maxTurns}-turn limit\n`));
       }
-      this.write(dim(`  ${statsLine(turnUsage, this.model, Date.now() - t0, result.turns)}\n\n`));
+      this.write(
+        dim(`  ${statsLine(turnUsage, this.model, Date.now() - t0 + extraWallMs, result.turns)}\n\n`),
+      );
     } finally {
       stopWatch();
     }
+  }
+
+  /** /seek — plan a split, pre-spawn one explorer per piece, synthesize.
+   * The parent deliberately investigates NOTHING before delegating; that
+   * ordering is the entire difference between the regime that won and the
+   * one that lost by 2x. */
+  private async seek(question: string): Promise<void> {
+    const { dim, red, cyan, bold } = this.palette;
+    if (question === "") {
+      this.write(dim("  usage: /seek <question to investigate in parallel>\n\n"));
+      return;
+    }
+
+    const ac = new AbortController();
+    let interrupted = false;
+    const stopWatch = this.watchInterrupt(() => {
+      if (interrupted) return;
+      interrupted = true;
+      this.write(dim("\n  (interrupting...)\n"));
+      ac.abort();
+    });
+
+    const t0 = Date.now();
+    let plan;
+    try {
+      this.write(dim("  planning...\n"));
+      plan = await planSeek(question, {
+        apiKey: this.opts.apiKey,
+        baseUrl: this.opts.baseUrl,
+        model: this.model,
+        view: this.session.viewMessages() as Message[],
+        cwd: this.opts.cwd,
+        signal: ac.signal,
+      });
+    } finally {
+      stopWatch();
+    }
+    if (interrupted) {
+      this.write(dim("  interrupted\n\n"));
+      return;
+    }
+
+    if (!plan.decomposable) {
+      // Not a failure: fan-out on shallow work measured 2.49x wall and
+      // 6.75x cost, so answering inline IS the right outcome here.
+      this.write(dim(`  not decomposable (${plan.reason}) — answering directly\n`));
+      await this.turn(question);
+      return;
+    }
+
+    const manager = this.opts.makeManager();
+    const spawned: { id: string; label: string }[] = [];
+    for (const piece of plan.pieces) {
+      const r = manager.spawn("explorer", piece.prompt);
+      if (!r.ok) {
+        this.write(`  ${red(r.error)}\n`);
+        break;
+      }
+      spawned.push({ id: r.id, label: piece.label });
+      this.write(`  ${cyan(`task ${r.id}`)}  ${dim(`explorer   ${piece.label}`)}\n`);
+    }
+    if (spawned.length === 0) {
+      this.write(dim("  nothing spawned — answering directly\n"));
+      await this.turn(question);
+      return;
+    }
+    this.write(dim(`  -> ${spawned.length} spawned in one turn, waiting\n`));
+
+    const stopWatch2 = this.watchInterrupt(() => {
+      if (interrupted) return;
+      interrupted = true;
+      this.write(dim("\n  (interrupting...)\n"));
+      manager.cancelAll();
+    });
+    let records;
+    try {
+      // Wait per-child so completions render as they land, not in a batch.
+      records = await Promise.all(
+        spawned.map(async ({ id, label }) => {
+          const [rec] = await manager.wait([id]);
+          const tag = rec.status === "done" ? dim("done") : red(rec.status);
+          const why = rec.killedBy !== undefined ? red(` (budget: ${rec.killedBy})`) : "";
+          this.write(
+            `  ${bold(rec.id)} ${tag}${why}  ${dim(`${rec.turns} turns  ${(rec.wallMs / 1000).toFixed(1)}s  ${label}`)}\n`,
+          );
+          return rec;
+        }),
+      );
+    } finally {
+      stopWatch2();
+    }
+
+    const childUsage = manager.totalUsage();
+    const searchMs = Date.now() - t0;
+    if (interrupted && records.every((r) => r.resultText.trim() === "")) {
+      this.write(dim("  interrupted before any report came back\n\n"));
+      this.usage = addUsage(this.usage, childUsage);
+      return;
+    }
+
+    this.write("\n");
+    await this.turn(synthesisPrompt(question, records.map(renderReport)), childUsage, searchMs);
   }
 
   private totalsLine(): string {
@@ -266,6 +376,10 @@ export class Repl {
       case "/exit":
       case "/quit":
         return true;
+
+      case "/seek":
+        await this.seek(arg);
+        return false;
 
       case "/help":
         for (const [name, desc] of COMMANDS) {
@@ -384,16 +498,6 @@ export class Repl {
         return false;
     }
   }
-}
-
-/** Per-turn child usage: the manager's totals are cumulative for the
- * process, so a turn's share is the delta across it. */
-function subUsage(after: Usage, before: Usage): Usage {
-  return {
-    inputFresh: after.inputFresh - before.inputFresh,
-    cacheRead: after.cacheRead - before.cacheRead,
-    output: after.output - before.output,
-  };
 }
 
 export async function runRepl(opts: ReplOptions): Promise<number> {

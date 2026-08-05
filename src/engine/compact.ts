@@ -35,8 +35,10 @@ export const TASK_PIN_PREFIX =
   "[The original task, restated verbatim — this is still the goal:]\n\n";
 
 /** One text for the compaction message: summary first, pinned task last.
- * Single user message (not two) — consecutive same-role messages are not
- * safe to assume on the /anthropic wire. */
+ * Single user message (not two) so the summary and its task pin cannot be
+ * separated by a later tail edit. Consecutive same-role messages are in
+ * fact accepted by the /anthropic endpoint (verified live; an interrupted
+ * turn produces them), so this is a cohesion choice, not a wire limit. */
 export function buildCompactionText(summary: string, task?: string): string {
   return (
     COMPACTION_PREFIX + summary + (task !== undefined && task !== "" ? "\n\n" + TASK_PIN_PREFIX + task : "")

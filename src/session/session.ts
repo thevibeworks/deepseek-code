@@ -4,9 +4,12 @@
 // starts a run, tool results from all finished runs are reclaimed in the
 // wire projection (losslessly: storage and view keep the originals).
 
-import type { Message } from "../provider/types";
+import type { Message, Usage } from "../provider/types";
+import { addUsage, zeroUsage } from "../provider/types";
 import type { RunOptions, RunResult } from "../engine/loop";
 import { runLoop } from "../engine/loop";
+import { compactedView, POST_COMPACT_ENVELOPE_TOKENS, retainedTail, summarize } from "../engine/compact";
+import { estimateTokens } from "../engine/context";
 import type { SessionMeta, SessionStore } from "./store";
 
 export type SessionRunOptions = Omit<
@@ -18,6 +21,10 @@ export class Session {
   private view: Message[];
   private summary: string | undefined;
   private readonly reclaimIds = new Set<string>();
+  /** Last user prompt, pinned as the task on a manual compaction. */
+  private lastPrompt: string | undefined;
+  private usage: Usage = zeroUsage();
+  private turns = 0;
 
   private constructor(
     private readonly store: SessionStore,
@@ -54,7 +61,47 @@ export class Session {
     }
   }
 
+  /** Estimated size of the current context view, in tokens. */
+  contextTokens(): number {
+    return this.view.length === 0 ? 0 : estimateTokens(JSON.stringify(this.view));
+  }
+
+  /** Usage and turns accumulated over every run on this session object.
+   * Resumed history is NOT included: those tokens were paid in another
+   * process, and counting them again would double-bill the display. */
+  totals(): { usage: Usage; turns: number } {
+    return { usage: this.usage, turns: this.turns };
+  }
+
+  /** Compact on demand (the interactive `/compact`). Same pipeline as the
+   * automatic path, minus the threshold check: summarize, keep a tail at a
+   * wire-valid boundary, pin the last prompt. Returns null when there is
+   * nothing to compact. */
+  async compact(opts: {
+    apiKey: string;
+    baseUrl: string;
+    model: string;
+    signal?: AbortSignal;
+  }): Promise<{ before: number; after: number; llm: boolean } | null> {
+    if (this.view.length === 0) return null;
+    const before = this.contextTokens();
+    const { summary, llm } = await summarize(this.view, this.summary, opts);
+    const tail = retainedTail(this.view, POST_COMPACT_ENVELOPE_TOKENS);
+    const next = compactedView(summary, this.lastPrompt, tail);
+    this.view.length = 0;
+    this.view.push(...next);
+    this.summary = summary;
+    this.store.appendCompaction(this.meta.id, {
+      summary,
+      llm,
+      tail,
+      ...(this.lastPrompt !== undefined ? { task: this.lastPrompt } : {}),
+    });
+    return { before, after: this.contextTokens(), llm };
+  }
+
   async run(prompt: string, opts: SessionRunOptions): Promise<RunResult> {
+    this.lastPrompt = prompt;
     this.reclaimFinishedRuns();
     const result = await runLoop({
       ...opts,
@@ -74,6 +121,8 @@ export class Session {
         });
       },
     });
+    this.usage = addUsage(this.usage, result.usage);
+    this.turns += result.turns;
     return result;
   }
 }

@@ -14,6 +14,11 @@ Entries present here:
   earlier conclusions in the same document. Read Finding 4 before
   trusting the earlier verdict; the wrong turn is left visible on
   purpose.
+- `2026-08-05-m5-interactive.org` — interactive mode: why it is not a
+  TUI, the two terminal-input traps (both measured, both wrong in
+  opposite directions), a `kill` bug that had been quietly breaking
+  command timeouts all along, and the token-cost premise for the whole
+  milestone turning out to be false.
 
 Entries for M1-M3 are held back for now: they are written around a
 private comparison harness (a proprietary agent CLI retargeted to

@@ -281,6 +281,10 @@ done right).
 4. Sub-agents (task tool + roles + budgets). Exit: parallel exploration
    eval beats single-agent on wall-clock at comparable cost.
 5. TUI (minimal: input, stream render, /status, /pro, modes).
+   SHIPPED, re-cut: the missing capability was a conversation, not a
+   canvas, so this landed as a line-based interactive mode with no TUI
+   dependency (pi-tui not adopted; see
+   docs/devlog/2026-08-05-m5-interactive.org). /pro still open.
 6. Scheduler (`dsc serve`, cron + watch, decision-file pattern, ps).
 7. Skills + MCP client.
 

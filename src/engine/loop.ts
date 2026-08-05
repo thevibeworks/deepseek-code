@@ -101,6 +101,13 @@ export const DOOM_LOOP_TEXT =
   "approach: inspect something different or make a different edit before " +
   "retrying.";
 
+/** Stands in for tool calls that a cancelled batch never ran. The model
+ * reads this on the next turn of a resumed session, so it says what
+ * happened rather than looking like a tool failure. */
+export const INTERRUPTED_TEXT =
+  "The user interrupted this run before this tool call was executed. " +
+  "It did not run and had no effect.";
+
 export const READ_DEDUP_TEXT =
   "[Unchanged since your previous read of this file — identical content " +
   "elided. Scroll up to your earlier read for the contents.]";
@@ -137,6 +144,7 @@ export async function runLoop(opts: RunOptions): Promise<RunResult> {
   const toolCtx: ToolContext = {
     cwd: opts.cwd,
     spillDir: join(tmpdir(), `dsc-spill-${process.pid}`),
+    ...(opts.signal !== undefined ? { signal: opts.signal } : {}),
   };
   const toolMap = new Map(opts.tools.map((t) => [t.name, t]));
   const meter = new ContextMeter();
@@ -298,6 +306,18 @@ export async function runLoop(opts: RunOptions): Promise<RunResult> {
     // Execute sequentially in source order; results appended in source order.
     const results: ToolResultBlock[] = [];
     for (const tu of toolUses) {
+      // Cancellation stops the batch, but EVERY tool_use still gets a
+      // paired result — an unpaired tool_use is an invalid payload, and
+      // the interrupted view has to stay resumable.
+      if (opts.signal?.aborted === true) {
+        results.push({
+          type: "tool_result",
+          tool_use_id: tu.id,
+          content: [{ type: "text", text: INTERRUPTED_TEXT }],
+          is_error: true,
+        });
+        continue;
+      }
       emit({ type: "tool_execution_start", id: tu.id, name: tu.name, input: tu.input });
       const r = await executeToolCall(tu, toolMap, toolCtx);
       let output = r.output;
@@ -321,6 +341,10 @@ export async function runLoop(opts: RunOptions): Promise<RunResult> {
     const resultsMsg: Message = { role: "user", content: results };
     messages.push(resultsMsg);
     onMessage(resultsMsg);
+    if (opts.signal?.aborted === true) {
+      emit({ type: "turn_end", turn: turns, usage: assistant.usage, contextTokens: meter.estimate() });
+      return finish("aborted");
+    }
     await maybeCompact();
     emit({ type: "turn_end", turn: turns, usage: assistant.usage, contextTokens: meter.estimate() });
   }

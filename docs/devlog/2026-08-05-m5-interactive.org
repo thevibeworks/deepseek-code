@@ -1,0 +1,154 @@
+#+TITLE: M5: interactive mode — two input traps, a kill bug that predates it, and the cache premise that turned out false
+#+DATE: 2026-08-05
+
+* Tension
+
+DESIGN.md build order item 5 says "TUI (minimal: input, stream render,
+/status, /pro, modes)", and line 28 names pi-tui as the stack. But the
+thing actually missing from dsc was not a canvas — it was a
+conversation. `dsc` had exactly one mode, `-p`, one shot, exit.
+
+So the milestone was re-cut: build the conversation, not the TUI. The
+renderer is line-based and dependency-free. A full-screen differential
+renderer buys redraw fidelity and costs a dependency plus a second
+rendering model, and it adds no capability the line renderer lacks.
+The zero-runtime-dependency property is worth more here than redraw
+fidelity. pi-tui stays available if a real need for it shows up.
+
+* What shipped
+
+- src/ui/repl.ts: `dsc` with no -p. Slash commands (/help /status
+  /cost /model /compact /clear /sessions /resume /thinking /exit),
+  Ctrl-C to interrupt a turn, Ctrl-D to leave, history across turns.
+- src/ui/render.ts: pure projection of engine/events.ts onto a
+  terminal. ASCII only; colour only when stdout is a TTY and NO_COLOR
+  is unset. Per-turn footer: turns, wall, input (with cache-hit %),
+  output, cost.
+- Sessions default ON in interactive mode. `--continue` resumes the
+  latest session for the cwd; SessionStore.list() backs it and
+  /sessions. Sub-agent children (id "parent.tN") are filtered out —
+  they are an implementation detail of one parent run.
+- Session gained contextTokens(), totals(), and compact() (the manual
+  /compact: same pipeline as autocompaction, minus the threshold).
+- ToolContext gained `signal`. The loop threads the run's AbortSignal
+  to tools and stops a batch on abort.
+
+* Finding 1: both obvious ways to read input are wrong
+
+Measured on this Bun/readline, not reasoned about:
+
+- `rl.pause()` for the duration of a turn: Ctrl-C reaches NOBODY.
+  Readline's terminal mode puts stdin in raw mode, so the OS never
+  raises SIGINT; and a paused interface never decodes the 0x03 byte.
+  Neither the interface's 'SIGINT' event nor a process-level handler
+  fires. The turn is uninterruptible.
+- Leaving readline active during a turn: keystrokes echo into the
+  middle of streaming output, and — worse — survive into the next
+  prompt. Typing "typeahead" while the agent worked, then Ctrl-C, then
+  "second" produced the line "secondtypeahead". Silent corruption of
+  the user's next message.
+
+What works: close the interface for the duration of each turn and own
+stdin directly (raw mode, watch 0x03, discard everything else).
+History is carried across interfaces by hand. Verified under a pty:
+type-ahead never appears, the interrupt lands, history recall works.
+
+This is the same class of bug the Go sibling hit (Ctrl-C at an idle
+prompt ending the whole session). Terminal input is not a detail to
+be dashed off at the end of a milestone.
+
+* Finding 2: killing bash did not kill the command (predates M5)
+
+Interrupting a turn that was running `sleep 90 && echo done` hung the
+whole REPL. `proc.kill(9)` kills bash, but the grandchild inherits the
+stdout pipe and holds it open, so the drain blocks until the
+grandchild exits on its own.
+
+Measured: kill at 500ms, drain returned after **20166ms** for a
+`sleep 20` grandchild. Spawning into its own process group
+(`detached: true`) and killing the group returns in **578ms**.
+
+This was never an interrupt bug. It was already breaking
+`timeout_seconds`: a command that spawned anything long-lived ignored
+its own timeout in practice. The interrupt path is just what finally
+made it visible. tests/bash-kill.test.ts pins both paths at <5s.
+
+* Finding 3: the cache premise for interactive mode was false
+
+The claim written into the first draft of cli.ts: interactive is the
+only mode where the prefix cache survives between prompts, because the
+context stays in one process.
+
+Tested before shipping the claim. Three separate curl processes, byte-
+identical bodies:
+
+| call | process | input_tokens | cache_read |
+|------+---------+--------------+------------|
+|    1 | A       |         3945 |          0 |
+|    2 | B       |          105 |       3840 |
+|    3 | C       |          105 |       3840 |
+
+The prefix cache is server-side and cross-process. `dsc -p --resume`
+reuses the same prefix and pays the same. Confirmed end to end: a
+`--continue` run in a fresh process recalled the previous process's
+conversation at 97% cached.
+
+So interactive mode is NOT a token-cost win, and saying so would have
+been folklore with a plausible mechanism behind it. What it actually
+buys is latency (no process start, no view rebuilt from SQLite per
+prompt) and control (interrupts, slash commands, live rendering). The
+comments in cli.ts and ui/repl.ts now say that.
+
+* Finding 4: consecutive user messages are accepted
+
+An interrupted turn ends the view on a user message (the tool_results
+carrier), and the next prompt appends another user message. compact.ts
+carries a caution that consecutive same-role messages are "not safe to
+assume" on the /anthropic wire, which would have forced a synthetic
+assistant message in between.
+
+Verified live instead: two consecutive user messages are accepted and
+the second one wins. No workaround needed, one mechanism not built.
+
+* The invariant the interrupt path had to keep
+
+toWire() drops aborted and errored assistant turns. So a half-executed
+batch must never leave tool_results behind whose tool_use was dropped —
+that is an orphaned result and an invalid payload on the next prompt.
+
+The rule implemented: cancellation stops the batch, but EVERY tool_use
+still gets a paired result; the ones that never ran get an explicit
+"the user interrupted this run before this tool call was executed"
+stub. tests/loop-interrupt.test.ts asserts pairing survives toWire,
+and that an interrupted view is a valid prefix for the next prompt.
+
+Note on that test: the first version aborted on a 400ms timer and
+passed while testing nothing — the abort was landing during streaming,
+before any tool ran. Anchor aborts to the tool_execution_start event,
+not to a stopwatch.
+
+* Also fixed
+
+- Piped stdin (`printf '...' | dsc`) ran only the FIRST line. Creating
+  a readline interface per line is fine on a TTY but eats a pipe: the
+  first interface buffers the whole stream and the remainder is lost
+  when it closes. Pipes now read stdin once, up front.
+
+* Status
+
+Tests 50 -> 57. `-p` text and json output unchanged. The default tool
+set and system prompt are untouched, so the M1-gated prompt bytes still
+hold (prompt-golden green).
+
+* Open
+
+- No eval task covers interactive mode. The harness drives `-p`, and
+  the multi-run reclaim question (M2's unclaimed exit) is still
+  unmeasured — but the REPL is the surface that makes multi-run
+  measurable, so that eval is now unblocked.
+- /pro is still unbuilt; the M4 numbers make its "nearly free pro
+  reviewer" premise suspect and Finding 3 removes one more reason to
+  assume a second context is cheap.
+- Ctrl-C during a *tool* is honoured by bash only. read/edit/write are
+  fast enough that it has not mattered; the signal is on ToolContext
+  for whoever needs it next.

@@ -10,8 +10,8 @@ table, one cache model. That is what keeps this a few thousand lines
 instead of a few hundred thousand.
 
 **Status: work in progress.** The agent loop, tools, context engine,
-sessions/compaction, and sub-agents work and are eval-gated. There is no
-TUI yet. Interfaces will move.
+sessions/compaction, sub-agents, and interactive mode work and are
+eval-gated. Interfaces will move.
 
 ## Install / run
 
@@ -19,7 +19,21 @@ Requires [Bun](https://bun.sh) and a DeepSeek API key.
 
 ```bash
 export DEEPSEEK_API_KEY=sk-...          # or write it to ~/.dsc/key
-bun src/cli.ts -p "fix the failing test in src/parse.js"
+
+bun src/cli.ts                          # interactive
+bun src/cli.ts -p "fix the failing test in src/parse.js"   # one shot
+```
+
+Interactive is the default. Sessions are on automatically there, so
+`--continue` picks up where the last one in this directory left off.
+Ctrl-C interrupts a turn without losing the session; Ctrl-D leaves.
+Commands: `/help /status /cost /model /compact /clear /sessions /resume
+/thinking /exit`.
+
+Piped input works too, which makes scripted multi-turn runs easy:
+
+```bash
+printf 'read src/parse.js\nnow fix the regex\n/cost\n' | bun src/cli.ts
 ```
 
 Useful flags:
@@ -27,11 +41,13 @@ Useful flags:
 ```
 --model deepseek-v4-flash|deepseek-v4-pro
 --cwd DIR                 working directory for the run
---output-format text|json JSON is the machine surface (used by eval/)
+--continue                interactive: resume the latest session here
 --save / --resume ID      persist the session to SQLite (~/.dsc/)
+--output-format text|json -p only; JSON is the machine surface (eval/)
 --context-budget N        lower the autocompaction threshold
 --subagents               enable the task tool (off by default; see below)
---verbose                 stream reasoning, tool calls and compactions to stderr
+--thinking                interactive: stream reasoning by default
+--verbose                 -p only; stream progress to stderr
 ```
 
 ## What is actually built
@@ -58,6 +74,12 @@ Useful flags:
   `task` tool with spawn/wait/result/cancel, roles as
   prompt+permission+model presets, and budget envelopes (turns, tokens,
   wall-clock). Off by default; see below for why.
+- **Interactive mode** (`src/ui/`) — a line-based conversation, no TUI
+  dependency. The renderer is a pure projection of the agent event
+  stream, so `-p` still runs with no renderer attached. Interrupting a
+  turn leaves a *resumable* session: a cancelled tool batch still pairs
+  every tool call with a result, because an orphaned result is an
+  invalid payload on the next prompt.
 - **Eval harness** (`eval/`) — the part that decides what stays.
 
 ## Everything here is eval-gated
@@ -97,6 +119,14 @@ them on its own — with the tool present *and* a guideline explicitly
 telling it to delegate before investigating, it spawned nothing in 3/3
 runs. Delegation is a caller-driven feature here, not an autonomous
 behavior. Full numbers: `eval/BASELINE.md`, section `parallel-fix`.
+
+**Interactive mode does not save you tokens.** The premise it was built
+on — "one process keeps the prefix cache warm" — is false: the cache is
+server-side and cross-process. A second process sending identical bytes
+read 3840 of 3945 input tokens from cache, so `-p --resume` was already
+getting the same discount. Interactive earns its place on latency and
+control, not cost. The measurement is in
+`docs/devlog/2026-08-05-m5-interactive.org`.
 
 ## Tests
 

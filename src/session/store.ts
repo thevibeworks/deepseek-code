@@ -73,6 +73,30 @@ export class SessionStore {
       : null;
   }
 
+  /** Most recent sessions first. Sub-agent children (id `parent.childId`)
+   * are excluded — they are an implementation detail of one parent run,
+   * never something a user resumes. */
+  list(opts: { cwd?: string; limit?: number } = {}): (SessionMeta & { messages: number })[] {
+    const where = opts.cwd !== undefined ? "WHERE s.cwd = ?" : "";
+    const rows = this.db
+      .query(
+        `SELECT s.id, s.created_at, s.model, s.cwd,
+                (SELECT COUNT(*) FROM session_message m WHERE m.session_id = s.id) AS n
+         FROM session s ${where} ORDER BY s.created_at DESC`,
+      )
+      .all(...(opts.cwd !== undefined ? [opts.cwd] : [])) as any[];
+    return rows
+      .filter((r) => !r.id.includes("."))
+      .slice(0, opts.limit ?? 20)
+      .map((r) => ({
+        id: r.id,
+        createdAt: r.created_at,
+        model: r.model,
+        cwd: r.cwd,
+        messages: r.n,
+      }));
+  }
+
   private nextSeq(sessionId: string): number {
     const row = this.db
       .query("SELECT COALESCE(MAX(seq), 0) AS m FROM session_message WHERE session_id = ?")

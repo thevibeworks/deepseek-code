@@ -1,8 +1,15 @@
 #!/usr/bin/env bun
-// dsc CLI — headless print mode + sessions.
+// dsc CLI — interactive mode + headless print mode + sessions.
+//   dsc                      interactive (sessions ON, see ui/repl.ts)
 //   dsc -p "prompt" [--model m] [--cwd dir] [--output-format text|json]
 //       [--max-turns n] [--verbose] [--save] [--resume id]
 //       [--context-budget tokens] [--subagents]
+// With no -p we start a conversation. Note what this does NOT buy: the
+// prefix cache is server-side and cross-process (measured — a second
+// process sending identical bytes read 3840/3945 tokens from cache), so
+// `-p --resume` is not paying more for tokens. Interactive earns its keep
+// on ergonomics and latency: no process start, no view rebuilt from
+// SQLite per prompt, and interrupts that leave a resumable session.
 // Sub-agents are opt-in (--subagents / $DSC_SUBAGENTS=1): the parent then
 // gets the task tool (spawn/wait/result/cancel); children never get it
 // (depth 1, no nesting). Reported usage totals include child usage.
@@ -32,6 +39,7 @@ import { bashTool } from "./tools/bash";
 import { editTool } from "./tools/edit";
 import { writeTool } from "./tools/write";
 import { makeTaskTool } from "./tools/task";
+import { runRepl } from "./ui/repl";
 
 function argValue(name: string): string | undefined {
   const i = process.argv.indexOf(`--${name}`);
@@ -41,12 +49,33 @@ function hasFlag(name: string): boolean {
   return process.argv.includes(`--${name}`);
 }
 
+const USAGE = `usage:
+  dsc                          interactive session in the current directory
+  dsc -p "prompt"              one-shot, print the result and exit
+
+  --model NAME                 ${Object.keys(MODELS).join(" | ")}
+  --cwd DIR                    working directory for the run
+  --continue                   interactive: resume the latest session here
+  --resume ID                  resume a specific session
+  --save                       persist a -p run (interactive always saves)
+  --subagents                  enable the task tool (see BASELINE.md)
+  --context-budget N           lower the autocompaction threshold
+  --thinking                   interactive: stream reasoning by default
+  --max-turns N                cap turns in a single run
+  --output-format text|json    -p only; json is the machine surface
+  --verbose                    -p only; stream progress to stderr
+  --help`;
+
+if (hasFlag("help")) {
+  console.log(USAGE);
+  process.exit(0);
+}
+
 const promptIdx = process.argv.indexOf("-p");
 const prompt = promptIdx >= 0 ? process.argv[promptIdx + 1] : undefined;
-if (!prompt) {
-  console.error(
-    'usage: dsc -p "prompt" [--model m] [--cwd dir] [--output-format text|json] [--max-turns n] [--verbose]',
-  );
+const interactive = prompt === undefined;
+if (promptIdx >= 0 && prompt === undefined) {
+  console.error("dsc: -p needs a prompt");
   process.exit(2);
 }
 
@@ -91,15 +120,25 @@ const baseUrl = process.env.DSC_BASE_URL ?? DEFAULT_BASE_URL;
 
 // Session setup happens before tool assembly: child persistence closes
 // over the store, and the task tool closes over the manager.
+// Interactive ALWAYS persists — a conversation you cannot resume is one
+// you lose to a closed terminal, and the rows cost a few KB.
 let store: SessionStore | undefined;
 let session: Session | undefined;
 let sessionId: string | undefined;
-if (save || resumeId !== undefined) {
+if (interactive || save || resumeId !== undefined) {
   store = new SessionStore();
-  const s =
-    resumeId !== undefined ? Session.resume(store, resumeId) : Session.create(store, model, cwd);
+  let target = resumeId;
+  if (target === undefined && hasFlag("continue")) {
+    const latest = store.list({ cwd, limit: 1 })[0];
+    if (latest === undefined) {
+      console.error(`dsc: no previous session in ${cwd}`);
+      process.exit(2);
+    }
+    target = latest.id;
+  }
+  const s = target !== undefined ? Session.resume(store, target) : Session.create(store, model, cwd);
   if (s === null) {
-    console.error(`dsc: no session "${resumeId}"`);
+    console.error(`dsc: no session "${target}"`);
     process.exit(2);
   }
   session = s;
@@ -138,6 +177,26 @@ const tools = subagents
   ? [readTool, bashTool, editTool, writeTool, makeTaskTool(manager)]
   : [readTool, bashTool, editTool, writeTool];
 
+if (interactive) {
+  const code = await runRepl({
+    store: store!,
+    session: session!,
+    manager,
+    tools,
+    model,
+    cwd,
+    apiKey,
+    baseUrl,
+    maxTurns,
+    contextBudget,
+    thinking: hasFlag("thinking"),
+  });
+  manager.cancelAll();
+  await manager.wait();
+  store!.close();
+  process.exit(code);
+}
+
 const runOpts = {
   model,
   cwd,
@@ -160,11 +219,13 @@ const runOpts = {
     : undefined,
 };
 
+// Past the interactive branch, so -p was given.
+const task = prompt as string;
 let result: RunResult;
 if (session !== undefined) {
-  result = await session.run(prompt, runOpts);
+  result = await session.run(task, runOpts);
 } else {
-  result = await runLoop({ ...runOpts, prompt });
+  result = await runLoop({ ...runOpts, prompt: task });
 }
 // Children never outlive the parent run; a spawned-but-never-awaited
 // child is cancelled here and its partial usage still counts.

@@ -7,6 +7,10 @@ export type ToolContext = {
   cwd: string;
   /** Directory for spilled oversize tool output (created on first use). */
   spillDir?: string;
+  /** Aborted when the run is cancelled (interactive Ctrl-C, budget kill).
+   * Tools that can block for a long time MUST honour it — without this a
+   * Ctrl-C waits out bash's 120s timeout before the loop sees it. */
+  signal?: AbortSignal;
 };
 
 export type ToolResult = { output: string; isError?: boolean };

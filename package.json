@@ -1,6 +1,6 @@
 {
   "name": "dsc",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": false,
   "type": "module",
   "description": "DeepSeek-native coding agent for the v4 flash/pro series. TypeScript/Bun, zero runtime dependencies.",

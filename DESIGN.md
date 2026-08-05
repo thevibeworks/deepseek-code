@@ -290,6 +290,16 @@ done right).
    including the measurement that it costs wall-clock rather than saving
    it.
 6. Scheduler (`dsc serve`, cron + watch, decision-file pattern, ps).
+   SHIPPED (docs/scheduler.md, devlog 2026-08-05-m7-scheduler.org).
+   Deviations from this document, both narrowings: the ledger is
+   jobs.json (atomic tmp+rename) + an append-only job-runs.jsonl the
+   daemon tail-follows — the Round 3 "inbox = event projection" idea
+   at file scale; and serve is the scheduler daemon only — the HTTP/SSE
+   surface waits for the durable event log rather than shipping as a
+   second, weaker API now. Run-now works without an RPC: the CLI
+   appends a request event, only the daemon fires. The read preset
+   carries a ported classifyBash (docs/research/deepseek-pi-sibling.md)
+   so "read-only scheduled run" is enforced, not advisory prose.
 7. Skills + MCP client.
 
 Eval harness (EVAL.md, separate task) develops in parallel from milestone

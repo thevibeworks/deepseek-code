@@ -24,6 +24,10 @@ Entries present here:
   planner that refused because it had never seen the repo; reasoning
   tokens silently eating the plan and looking like a refusal), and the
   measurement that it does not buy speed.
+- `2026-08-05-m7-scheduler.org` — scheduled jobs: one cron parser for
+  add and fire, the two-file ledger, the read-only preset built on a
+  classifier ported from the Go sibling (with the holes found porting
+  it), and why serve ships without HTTP.
 
 Entries for M1-M3 are held back for now: they are written around a
 private comparison harness (a proprietary agent CLI retargeted to

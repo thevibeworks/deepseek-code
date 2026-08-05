@@ -24,10 +24,10 @@
 // eval/pricing.json, never trust harness cost fields).
 // Key resolution: $DEEPSEEK_API_KEY, else ~/.dsc/key.
 
-import { existsSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 import { DEFAULT_BASE_URL, DEFAULT_MODEL, MODELS } from "./provider/catalog";
+import { resolveApiKey } from "./config";
+import { schedulerCli } from "./scheduler/cli";
 import { addUsage } from "./provider/types";
 import { runLoop } from "./engine/loop";
 import type { RunResult } from "./engine/loop";
@@ -52,6 +52,7 @@ function hasFlag(name: string): boolean {
 const USAGE = `usage:
   dsc                          interactive session in the current directory
   dsc -p "prompt"              one-shot, print the result and exit
+  dsc job|ps|serve             scheduled jobs (dsc job for details)
 
   --model NAME                 ${Object.keys(MODELS).join(" | ")}
   --cwd DIR                    working directory for the run
@@ -69,6 +70,12 @@ const USAGE = `usage:
 if (hasFlag("help")) {
   console.log(USAGE);
   process.exit(0);
+}
+
+// Scheduler verbs dispatch before everything else: they neither need a
+// prompt nor (except serve) an API key, and they must never fire a job.
+if (["job", "ps", "serve"].includes(process.argv[2] ?? "")) {
+  process.exit(await schedulerCli(process.argv.slice(2)));
 }
 
 const promptIdx = process.argv.indexOf("-p");
@@ -103,12 +110,6 @@ const contextBudget = Number(
   argValue("context-budget") ?? process.env.DSC_CONTEXT_BUDGET ?? MODELS[model].inputBudget,
 );
 
-function resolveApiKey(): string | null {
-  if (process.env.DEEPSEEK_API_KEY) return process.env.DEEPSEEK_API_KEY.trim();
-  const keyFile = join(homedir(), ".dsc", "key");
-  if (existsSync(keyFile)) return readFileSync(keyFile, "utf8").trim();
-  return null;
-}
 const apiKey = resolveApiKey();
 if (!apiKey) {
   console.error("dsc: no API key ($DEEPSEEK_API_KEY or ~/.dsc/key)");

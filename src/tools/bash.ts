@@ -3,6 +3,7 @@ import { normalizeAliases } from "./index";
 import { truncateTail } from "./truncate";
 import { drainStream, OutputAccumulator } from "./accumulator";
 import type { AccumulatedOutput } from "./accumulator";
+import { classifyBash } from "./classify";
 
 const DEFAULT_TIMEOUT_S = 120;
 
@@ -117,5 +118,31 @@ export const bashTool: ToolDefinition = {
     }
     if (output.trim() === "") output = "(no output)";
     return { output };
+  },
+};
+
+/** bash restricted to the read-only allowlist (src/tools/classify.ts).
+ * Same name, same schema, same description — only execute changes, so a
+ * read-preset job's prompt differs from a write-preset one solely by the
+ * guideline announcing the restriction. Advisory against a hostile
+ * model, real against the accident case; docs/scheduler.md says which. */
+export const readOnlyBashTool: ToolDefinition = {
+  ...bashTool,
+  promptGuidelines: [
+    ...(bashTool.promptGuidelines ?? []),
+    "This run is read-only: bash executes only inspection commands (an allowlist of ls/cat/grep/find/git log-style commands, no redirects, no pipes into unknown programs). Do not attempt to modify anything.",
+  ],
+  async execute(input, ctx) {
+    const cls = classifyBash(String(input.command ?? ""));
+    if (!cls.safe) {
+      return {
+        output:
+          `This run is read-only and the command was not executed (${cls.reason}). ` +
+          "Only inspection commands from the read-only allowlist run here; " +
+          "report what you would have done instead of retrying variations.",
+        isError: true,
+      };
+    }
+    return bashTool.execute(input, ctx);
   },
 };

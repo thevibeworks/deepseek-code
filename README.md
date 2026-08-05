@@ -11,7 +11,8 @@ instead of a few hundred thousand.
 
 **Status: work in progress.** The agent loop, tools, context engine,
 sessions/compaction, sub-agents, and interactive mode work and are
-eval-gated. Interfaces will move.
+eval-gated; the job scheduler works and is test-gated (the default
+prompt is byte-unchanged by it). Interfaces will move.
 
 ## Install / run
 
@@ -85,6 +86,13 @@ Useful flags:
   turn leaves a *resumable* session: a cancelled tool batch still pairs
   every tool call with a result, because an orphaned result is an
   invalid payload on the next prompt.
+- **Scheduled jobs** (`src/scheduler/`) — `dsc job add` (cron / watch /
+  one-shot), `dsc ps`, `dsc serve`. Jobs fire only inside the long-lived
+  `dsc serve`; every other verb just edits an atomic ledger. Each firing
+  is a budgeted headless session you can resume afterwards. The default
+  preset is read-only, with bash held to an inspection allowlist; the
+  documented safety model for write jobs is the decision-file pattern.
+  See `docs/scheduler.md`.
 - **Eval harness** (`eval/`) — the part that decides what stays.
 
 ## Everything here is eval-gated

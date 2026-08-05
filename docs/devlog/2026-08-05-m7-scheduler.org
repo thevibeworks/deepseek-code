@@ -1,0 +1,93 @@
+#+TITLE: M7 scheduler — the proactive pillar, plus what the Go sibling comparison changed
+#+DATE: 2026-08-05
+
+* Tension
+
+Pillar 1 (proactive agent) was the last unbuilt differentiator, and the
+day started with a full comparison against the Go sibling
+(docs/research/deepseek-pi-sibling.md). Two findings from that
+comparison shaped the milestone:
+
+1. dsc had NO permission or scoping layer at all — every run is
+   effectively yolo. Tolerable for supervised runs; not for a scheduler
+   whose whole point is running unattended.
+2. The DESIGN safety model for scheduled work ("default permission
+   preset, no push/PR perms") referenced machinery that did not exist.
+
+So the milestone includes the smallest slice of the sibling's
+permission layer that makes unattended runs honest: a ported
+classifyBash behind a read-only tool preset. Not the interactive
+ask-chain — dsc has no interactive-permission users yet.
+
+* What shipped
+
+- src/scheduler/cron.ts — five-field vixie cron. ONE parser: add-time
+  validation and daemon firing share it (goose trap: a schedule that
+  parses at add but not at fire is a job that silently never runs).
+  Firing is match-based (does this minute match + once-per-minute
+  guard); next() exists only for ps display and refuses impossible
+  dates (Feb 30) instead of scanning forever.
+- src/tools/classify.ts — read-only bash classification, ported from
+  deepseek-pi's permission.go with its ordering intact: dangerous
+  fragments (>, `, $(, <(, newline) checked on the RAW string before
+  any splitting, then every pipeline segment must lead with an
+  allowlisted program; unknown means unsafe. Ports found real holes in
+  the first draft here too: xargs and env execute their arguments,
+  find has -exec/-delete, git branch/tag/config all have writing
+  forms. tests/classify.test.ts is the bypass suite.
+- src/tools/bash.ts readOnlyBashTool — same name, same schema, same
+  description (cache- and golden-stable); only execute changes, plus
+  one guideline line announcing the restriction so the model does not
+  burn turns discovering it. Live probe: flash read the guideline,
+  attempted nothing, and reported "session is explicitly read-only" in
+  one turn.
+- src/scheduler/ledger.ts — jobs.json (definitions, atomic tmp+rename)
+  and job-runs.jsonl (append-only run_request/run_start/run_end). The
+  daemon tail-follows the runs file by byte offset, reading only
+  complete lines — a concurrent CLI append cannot tear an event, and a
+  corrupt line skips, never kills the tick.
+- src/scheduler/daemon.ts — the only firing process. Cron / watch
+  (command predicate, exit 0 fires) / once triggers; overlap skips;
+  run-now requests honored exactly once (dedup by requestId through
+  the ledger, so it survives restarts); budget envelope per firing
+  (wall timer + token watch + turn cap — the sub-agent mechanics,
+  standalone); stale run_starts from a crashed daemon reaped at
+  startup by pid liveness; notify hook with env + result on stdin.
+- src/scheduler/cli.ts — job add/list/rm/run, ps, serve. serve holds a
+  pid lockfile (a second daemon would double-fire), reloads jobs.json
+  every tick so CLI edits land without a restart, and SIGTERM aborts
+  live runs into cancelled run_ends before exiting.
+- Every firing persists as a session (id <job>.<run-id>, dotted =
+  hidden from /sessions, resumable with --resume), so "what did the
+  3am run actually do" is one command, not archaeology.
+
+* Deviations from DESIGN.md, recorded there too
+
+- Ledger is jobs.json + JSONL events, not a single JSONL: definitions
+  want atomic replace, results want append-only; forcing one file to do
+  both jobs badly was the wrong reading of "task ledger (JSONL)".
+- No HTTP/SSE in serve yet. The durable event log that makes SSE
+  worth having (cursor replay) does not exist; shipping a second,
+  weaker API now would create the drift the one-API rule exists to
+  prevent. Run-now needed no RPC: request events through the ledger.
+
+* Verified live (real API, real daemon)
+
+One-shot job fired by a background serve; ps from a SEPARATE process
+showed the run mid-flight with its session id; run_end carried the
+full miss/hit/output usage split; notify hook fired with DSC_* env.
+Then a run-now request against a 2099-dated once job fired immediately
+and was honored exactly once. Read preset held live (zero write
+attempts, correct one-sentence refusal). SIGTERM: clean shutdown, pid
+file removed. 117 tests green; prompt-golden untouched.
+
+* Open
+
+- Watch predicates and cron minutes are polled in one 5s tick loop; a
+  sub-second trigger or hundreds of jobs would want a real schedule
+  queue. No such user exists yet.
+- The decision-file pattern is documented with a template but nothing
+  scaffolds it (`dsc job add --decision-file` writing the pair could).
+- Job runs autocompact at the model budget but the scheduler sets no
+  cost ceiling in dollars — the sibling's MaxCost-cumulative semantics
+  are the port candidate when it matters (port list #4).

@@ -81,6 +81,9 @@ export class Repl {
   private readonly tty = process.stdin.isTTY === true;
   private readonly palette: Palette;
   private readonly history: string[] = [];
+  /** Tool names for /status. The set is fixed for the life of the process
+   * (the --subagents decision happens at startup), so probe it once. */
+  private readonly toolNames: string[];
   private session: Session;
   private model: string;
   private thinking: boolean;
@@ -91,6 +94,7 @@ export class Repl {
 
   constructor(private readonly opts: ReplOptions) {
     this.palette = makePalette(colorEnabled(process.stdout));
+    this.toolNames = opts.makeTools(opts.makeManager()).map((t) => t.name);
     this.session = opts.session;
     this.model = opts.model;
     this.thinking = opts.thinking;
@@ -400,7 +404,7 @@ export class Repl {
             `  ${dim("context ")} ${formatCount(used)} / ${formatCount(threshold)} tokens (${pct}%)\n` +
             `  ${dim("turns   ")} ${turns}\n` +
             `  ${dim("cost    ")} ${this.totalsLine()}\n` +
-            `  ${dim("tools   ")} ${this.opts.tools.map((t) => t.name).join(", ")}\n\n`,
+            `  ${dim("tools   ")} ${this.toolNames.join(", ")}\n\n`,
         );
         return false;
       }

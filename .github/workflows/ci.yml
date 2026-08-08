@@ -1,0 +1,39 @@
+name: ci
+
+# The engine is eval-gated by hand and the tests are fast, but nothing was
+# running either on a push -- a green suite on a laptop is not a claim
+# anyone else can check. This runs the whole thing on every push and PR.
+#
+# Deliberately no eval job: eval/run.ts spends real money against the
+# DeepSeek API, so it stays a thing a human decides to run.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # Zero runtime dependencies is a claim the README makes, so there is
+      # nothing to install -- and if that ever stops being true, the next
+      # step fails on the missing module rather than passing quietly.
+      - name: test
+        run: bun test tests
+
+      # The suite covers units; this covers the thing a user types first.
+      # It needs no API key, which is the point -- a binary that cannot
+      # print its own usage is broken before any key matters.
+      - name: the CLI starts
+        run: bun src/cli.ts --help

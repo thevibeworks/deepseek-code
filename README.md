@@ -1,7 +1,9 @@
 # deepseek-code (`dsc`)
 
-A DeepSeek-native coding agent for the v4 flash/pro series. TypeScript,
-Bun, zero runtime dependencies.
+A DeepSeek-native coding agent for the v4 flash/pro series (pro is GA
+as of 2026-08-12, model version DeepSeek-V4-Pro-0813 — same
+`deepseek-v4-pro` model ID). TypeScript, Bun, zero runtime
+dependencies.
 
 Not a Claude Code clone and not a general multi-provider harness. Being
 DeepSeek-only is the design: one protocol state machine (the
@@ -55,6 +57,14 @@ Useful flags:
 --thinking                interactive: stream reasoning by default
 --verbose                 -p only; stream progress to stderr
 ```
+
+Both v4 models are 1M context / 384K max output and can be picked
+anywhere a model is chosen (`--model`, `/model` in interactive,
+`dsc job add --model`). Flash is the default executor; pro is the
+stronger tier and the right pick for planning and review passes — the
+built-in `reviewer` sub-agent role already runs on it. V4-Pro GA ships
+with thinking on by default upstream, and reasoning tokens count
+against `max_tokens`, which dsc's budgets already account for.
 
 ## What is actually built
 

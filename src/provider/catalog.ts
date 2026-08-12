@@ -1,8 +1,10 @@
 // Model catalog with REAL numbers (DESIGN.md: budget math always uses the
 // measured 616k usable input, never the advertised 1M).
-// Pricing: USD per 1M tokens, regular (off-peak) rates, from
-// deepseek-docs quick_start/pricing.md (fetched 2026-08-02). A peak-hour
-// 2x policy is announced but not yet in effect.
+// Pricing: USD per 1M tokens, from deepseek-docs quick_start/pricing.md.
+// Re-verified 2026-08-12 at V4-Pro GA (model version DeepSeek-V4-Pro-0813;
+// model ID unchanged): rates, context, and max output are unchanged. A
+// broad repricing is announced but undated — do NOT apply it here until
+// it lands with an effective date.
 
 export type ModelInfo = {
   id: string;

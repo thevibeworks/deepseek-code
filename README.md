@@ -16,6 +16,41 @@ sessions/compaction, sub-agents, and interactive mode work and are
 eval-gated; the job scheduler works and is test-gated (the default
 prompt is byte-unchanged by it). Interfaces will move.
 
+## dsc and dsh
+
+DeepSeek released an official agent harness on 2026-08-13:
+[dsh](https://github.com/deepseek-ai/deepseek-harness)
+(`npx @deepseek-ai/dsh`, developer preview, breaking changes
+promised). dsc does not compete with it. If you want the official,
+full-featured harness — plugin architecture, Web UI, the surface
+DeepSeek will keep building on — use dsh.
+
+dsc's lane is narrower and stays that way:
+
+- **A minimal, readable DeepSeek-native agent.** Zero runtime
+  dependencies, a few thousand lines, one protocol.
+- **A research vehicle that publishes measured results, including the
+  negative ones.** Fan-out does not buy speed (33.0s → 96.7s and
+  70.2s → 97.5s measured; what it buys is ~30% fewer parent input
+  tokens and N independent context budgets). Interactive mode is not
+  a token-cost win over `-p --resume` — the prefix cache is
+  server-side and cross-process. Delegation timing decides whether
+  sub-agents pay (before investigating: 1.30x faster; after: 2.08x
+  slower). Reasoning tokens bill against `max_tokens`. These are
+  properties of the API, not of dsc — they hold in any harness,
+  dsh included.
+- **A cross-harness testbed.** Small enough to change wire-level
+  behavior in an afternoon and measure the difference.
+
+Interop note: dsh discovers SKILL.md skills in `~/.agents/skills` and
+`<project>/.agents/skills`; dsc's planned skills support (milestone 7
+in the build order) targets the same layout, so one skills directory
+should serve both. Planned, not shipped.
+
+Short version: use dsh for the official, full-featured harness. Use
+dsc when you want a minimal auditable agent, wire-level experiments,
+or the measured findings in `eval/BASELINE.md` and `docs/devlog/`.
+
 ## Install / run
 
 Requires [Bun](https://bun.sh) and a DeepSeek API key.

@@ -13,8 +13,9 @@ instead of a few hundred thousand.
 
 **Status: work in progress.** The agent loop, tools, context engine,
 sessions/compaction, sub-agents, and interactive mode work and are
-eval-gated; the job scheduler works and is test-gated (the default
-prompt is byte-unchanged by it). Interfaces will move.
+eval-gated; the job scheduler and SKILL.md skills work and are
+test-gated (the default prompt is byte-unchanged by both). Interfaces
+will move.
 
 ## dsc and dsh
 
@@ -43,9 +44,9 @@ dsc's lane is narrower and stays that way:
   behavior in an afternoon and measure the difference.
 
 Interop note: dsh discovers SKILL.md skills in `~/.agents/skills` and
-`<project>/.agents/skills`; dsc's planned skills support (milestone 7
-in the build order) targets the same layout, so one skills directory
-should serve both. Planned, not shipped.
+`<project>/.agents/skills`; dsc reads the same layout with the same
+precedence rules (shipped — see Skills below), so one skills directory
+serves both harnesses.
 
 Short version: use dsh for the official, full-featured harness. Use
 dsc when you want a minimal auditable agent, wire-level experiments,
@@ -138,6 +139,18 @@ against `max_tokens`, which dsc's budgets already account for.
   preset is read-only, with bash held to an inspection allowlist; the
   documented safety model for write jobs is the decision-file pattern.
   See `docs/scheduler.md`.
+- **Skills** (`src/skills/`, `src/tools/skill.ts`) — SKILL.md discovery
+  from the same directories dsh reads: `<project>/.dsc/skills`,
+  `<project>/.agents/skills`, `~/.dsc/skills`, `~/.agents/skills`, in
+  that precedence on a name collision (project beats home,
+  harness-native beats shared — dsh's rank order, so both harnesses
+  resolve a collision identically). One skills directory serves both
+  harnesses. Progressive disclosure: the system prompt carries one
+  index line per skill; the body enters context only when the model
+  invokes the `skill` tool. With nothing discovered, no tool registers
+  and the default prompt is byte-unchanged. Broken frontmatter skips
+  that skill with a warning, never a crash. `dsc skills` lists what
+  discovery found and from where.
 - **Eval harness** (`eval/`) — the part that decides what stays.
 
 ## Everything here is eval-gated

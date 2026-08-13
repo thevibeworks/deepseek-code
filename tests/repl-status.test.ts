@@ -19,6 +19,7 @@ function makeRepl(): { repl: Repl; output: () => string; store: SessionStore } {
     session: Session.create(store, "deepseek-v4-flash", "/work"),
     makeManager: () => new SubagentManager({ apiKey: "k", baseUrl: "http://x", cwd: "/work" }),
     makeTools: () => [readTool, bashTool],
+    skills: [{ name: "release-notes", description: "Draft release notes." }],
     model: "deepseek-v4-flash",
     cwd: "/work",
     apiKey: "k",
@@ -52,5 +53,6 @@ describe("/status", () => {
     expect(out).toContain("read, bash");
     expect(out).toContain("deepseek-v4-flash");
     expect(out).toContain("context");
+    expect(out).toContain("release-notes");
   });
 });

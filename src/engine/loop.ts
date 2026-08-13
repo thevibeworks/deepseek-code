@@ -20,6 +20,7 @@ import { streamMessage } from "../provider/client";
 import type { ToolContext, ToolDefinition } from "../tools/index";
 import { validateInput } from "../tools/index";
 import { buildSystemPrompt, toWireTools } from "./prompt";
+import type { SkillIndexEntry } from "./prompt";
 import { ContextMeter, estimateTokens } from "./context";
 import {
   compactedView,
@@ -47,6 +48,10 @@ export type RunOptions = {
   apiKey: string;
   baseUrl: string;
   tools: ToolDefinition[];
+  /** Discovered skill index, rendered into the system prompt. Discovery
+   * happens once per process, so the prompt stays byte-stable across the
+   * runs of a session (epoch rule: never re-rendered mid-session). */
+  skills?: SkillIndexEntry[];
   maxTurns?: number;
   maxTokens?: number;
   signal?: AbortSignal;
@@ -139,7 +144,7 @@ export class TurnSeam {
 export async function runLoop(opts: RunOptions): Promise<RunResult> {
   const emit: EventSink = opts.onEvent ?? (() => {});
   const maxTurns = opts.maxTurns ?? 100;
-  const system = buildSystemPrompt(opts.tools, opts.cwd);
+  const system = buildSystemPrompt(opts.tools, opts.cwd, opts.skills);
   const wireTools = toWireTools(opts.tools);
   const toolCtx: ToolContext = {
     cwd: opts.cwd,

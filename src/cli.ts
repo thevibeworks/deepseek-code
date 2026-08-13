@@ -34,11 +34,13 @@ import type { RunResult } from "./engine/loop";
 import { SubagentManager } from "./engine/subagent";
 import { Session } from "./session/session";
 import { SessionStore } from "./session/store";
+import { discoverSkills } from "./skills/discover";
 import { readTool } from "./tools/read";
 import { bashTool } from "./tools/bash";
 import { editTool } from "./tools/edit";
 import { writeTool } from "./tools/write";
 import { makeTaskTool } from "./tools/task";
+import { makeSkillTool } from "./tools/skill";
 import { runRepl } from "./ui/repl";
 
 function argValue(name: string): string | undefined {
@@ -53,6 +55,7 @@ const USAGE = `usage:
   dsc                          interactive session in the current directory
   dsc -p "prompt"              one-shot, print the result and exit
   dsc job|ps|serve             scheduled jobs (dsc job for details)
+  dsc skills                   discovered SKILL.md skills and their sources
 
   --model NAME                 ${Object.keys(MODELS).join(" | ")}
   --cwd DIR                    working directory for the run
@@ -76,6 +79,26 @@ if (hasFlag("help")) {
 // prompt nor (except serve) an API key, and they must never fire a job.
 if (["job", "ps", "serve"].includes(process.argv[2] ?? "")) {
   process.exit(await schedulerCli(process.argv.slice(2)));
+}
+
+// `dsc skills` — what discovery found and from where, no API key needed.
+// The listing shows exactly what the session index will carry; a skipped
+// or shadowed SKILL.md is reported here rather than silently absent.
+if (process.argv[2] === "skills") {
+  const dir = resolve(argValue("cwd") ?? process.cwd());
+  const found = discoverSkills(dir);
+  for (const w of found.warnings) console.error(`warning: ${w}`);
+  if (found.skills.length === 0) {
+    console.log(
+      "no skills (searched <project>/.dsc/skills, <project>/.agents/skills, ~/.dsc/skills, ~/.agents/skills)",
+    );
+  }
+  for (const s of found.skills) {
+    console.log(`${s.name}  [${s.source}]`);
+    console.log(`    ${s.description}`);
+    console.log(`    ${s.path}`);
+  }
+  process.exit(0);
 }
 
 const promptIdx = process.argv.indexOf("-p");
@@ -115,6 +138,13 @@ if (!apiKey) {
   console.error("dsc: no API key ($DEEPSEEK_API_KEY or ~/.dsc/key)");
   process.exit(2);
 }
+
+// Skills are discovered ONCE per process, so the system prompt is
+// byte-stable across every run of a session (the epoch rule: the index
+// never re-renders mid-session). With nothing discovered, no skill tool
+// is registered and the prompt stays byte-identical to the gated golden.
+const skillset = discoverSkills(cwd);
+for (const w of skillset.warnings) console.error(`dsc: skills: ${w}`);
 
 const t0 = Date.now();
 const baseUrl = process.env.DSC_BASE_URL ?? DEFAULT_BASE_URL;
@@ -184,10 +214,16 @@ const makeManager = (): SubagentManager => {
 
 // The task TOOL stays opt-in (it changes the prompt); /seek drives the
 // same machinery from the frontend, so it needs no tool and no re-gate.
-const makeTools = (mgr: SubagentManager) =>
-  subagents
-    ? [readTool, bashTool, editTool, writeTool, makeTaskTool(mgr)]
-    : [readTool, bashTool, editTool, writeTool];
+// The skill tool registers only when discovery found something — same
+// rule, same reason: an inert tool would be dead prefix weight.
+const makeTools = (mgr: SubagentManager) => [
+  readTool,
+  bashTool,
+  editTool,
+  writeTool,
+  ...(subagents ? [makeTaskTool(mgr)] : []),
+  ...(skillset.skills.length > 0 ? [makeSkillTool(skillset.skills)] : []),
+];
 
 if (interactive) {
   const code = await runRepl({
@@ -195,6 +231,7 @@ if (interactive) {
     session: session!,
     makeManager,
     makeTools,
+    skills: skillset.skills,
     model,
     cwd,
     apiKey,
@@ -216,6 +253,7 @@ const runOpts = {
   apiKey,
   baseUrl,
   tools: makeTools(manager),
+  skills: skillset.skills,
   maxTurns,
   contextBudget,
   onEvent: verbose

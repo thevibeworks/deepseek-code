@@ -1,0 +1,111 @@
+#+TITLE: M8 skills — SKILL.md discovery shared with dsh: one directory, two harnesses
+#+DATE: 2026-08-13
+
+* Tension
+
+Skills were already the next milestone (build-order #7; the devlog
+numbering drifted to M8 because /seek took M6 and the scheduler M7).
+Then DeepSeek shipped dsh on launch day, and dsh reads SKILL.md skills
+from =~/.agents/skills= and =<project>/.agents/skills=. That upgraded a
+planned feature into an interop story: if dsc reads the same roots with
+the same precedence, one skills directory serves both harnesses, on the
+day the official harness launched.
+
+The constraint that shaped everything: the default system prompt is
+byte-frozen (prompt-golden) and every one of its bytes went through the
+eval gate. Skills had to be able to appear WITHOUT costing anything
+when absent, and without ever putting a skill body into the stable
+prefix.
+
+* What shipped
+
+- src/skills/discover.ts — discovery across four roots, in precedence
+  order: =<project>/.dsc/skills=, =<project>/.agents/skills=,
+  =~/.dsc/skills=, =~/.agents/skills=. First name wins a collision
+  (project beats home, harness-native beats shared); the loser gets a
+  "shadowed" warning, not silence. This mirrors dsh's root ranks (its
+  =.dsh/skills= sits where our =.dsc/skills= does — verified in dsh's
+  skill-filesystem package), so the two harnesses resolve the same
+  collision the same way. Project root = nearest ancestor with =.git=,
+  else cwd — also the dsh rule, so a repo subdirectory sees the same
+  skills in both harnesses. Skill identity is the frontmatter =name=
+  (dsh's rule, including its =^[a-z0-9]+(-[a-z0-9]+)*$= name check),
+  not the directory name.
+- Frontmatter parsing is a deliberate YAML subset, zero deps: top-level
+  =key: value= scalars, quoted values, =|=/=>= blocks (folded to one
+  line — the index renders one line per skill), nested structures
+  tolerated and ignored. Anything unparseable skips THAT skill with a
+  warning; a broken SKILL.md must never take down the session. Run
+  against the 126 real skills in this machine's =~/.agents/skills=:
+  all 126 parsed, zero warnings.
+- src/tools/skill.ts — progressive disclosure. The system prompt
+  carries one index line per skill (name + description); the body
+  enters context only when the model invokes =skill= with a name. The
+  tool schema is static (no name enum): names live in the index, so
+  adding a skill never rewrites the tool's prefix bytes. Zero skills =
+  no tool registered = the gated default prompt, byte-identical
+  (same rule as the task tool, and the golden test now proves it for
+  an empty index explicitly).
+- Discovery runs ONCE per process, so the prompt is byte-stable across
+  every run of a session — the epoch rule (never re-render
+  mid-session) satisfied by construction rather than by a
+  re-render-and-diff mechanism we did not build.
+- =dsc skills= — what discovery found, its source root, and every
+  warning. The listing is exactly what the session index will carry.
+  /status gained a =skills= line.
+
+* Measured: what the index costs (real API, flash)
+
+Same one-shot prompt, clean home, project-only skills, usage totals
+from the provider (fresh + cache_read; totals were byte-stable across
+repeat runs):
+
+| skills | input tokens/turn | delta |
+|--------+-------------------+-------|
+|      0 |             1,134 |     — |
+|      1 |             1,308 |  +174 |
+|      3 |             1,359 |  +225 |
+
+So the surface costs ~149 tokens fixed (skill tool schema + index line
++ one guideline + section header) and ~25 tokens per skill at
+realistic description lengths (~15–20 words). A 40-skill index would
+add ~1,100 tokens to every turn's prefix — cheap while cached, but not
+free; description length is the lever users control.
+
+* Verified live (real API)
+
+With three skills discovered, flash was asked to use one: it invoked
+=skill {"name": "release-notes"}=, got the body, and answered from it
+correctly. One honest wrinkle: the tool's output names the SKILL.md
+path (so skills can reference sibling files), and the model then
+re-read the same file with =read= before answering — a paid extra turn
+to confirm what it already had. Not changed for now: the path is what
+makes bundled-resource skills possible, and one wasted turn on a probe
+is observation, not measurement.
+
+* Deviations from DESIGN.md and the milestone spec
+
+- Build order #7 said "Skills + MCP client". MCP shipped nothing and
+  will ship nothing here: the Round 3 amendment already moved it out
+  of core, and dsh's launch adds a second reason to hold (their plugin
+  manifest format was deleted upstream 08-09 with no migration).
+  Recorded in DESIGN.md against the build-order entry.
+- dsh also accepts flat =<root>/skills/<name>.md= files (no directory).
+  dsc reads only the directory-bundle layout DESIGN specified —
+  =<name>/SKILL.md= — because that is the shared convention worth
+  interop. If flat-file skills show up in the wild, three lines add
+  them.
+- Scheduler jobs and sub-agent children do not get skills. Children
+  share one stable prefix per toolset by design, and job prompts are
+  their own gated surface; wiring skills into either is a decision for
+  a user who needs it, not a default.
+
+* Open
+
+- Skill bodies are capped by truncateHead (50 KB) rather than spilled;
+  a skill that long is probably wrong, but the spill path exists if
+  one ever earns it.
+- Mid-session skill changes are invisible until the next process
+  start (deliberate: epoch rule). If it ever matters, the epoch
+  boundary is where the refresh belongs — never prompt mutation.
+- Per-skill eval records ("skills with evidence") stay the v2 idea.

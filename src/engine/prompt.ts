@@ -22,7 +22,15 @@ const GENERIC_GUIDELINES = [
   "Your final text message is the deliverable. Keep it brief. If the task asks a question, end with exactly the answer requested.",
 ];
 
-export function buildSystemPrompt(tools: ToolDefinition[], cwd: string): string {
+/** One index line per discovered skill (DESIGN.md "Skills": the index is
+ * the only skill surface in the stable prefix; bodies load on invoke). */
+export type SkillIndexEntry = { name: string; description: string };
+
+export function buildSystemPrompt(
+  tools: ToolDefinition[],
+  cwd: string,
+  skills: SkillIndexEntry[] = [],
+): string {
   const toolLines = tools.map(
     (t) => `- ${t.name}: ${t.promptSnippet ?? firstSentence(t.description)}`,
   );
@@ -38,6 +46,15 @@ export function buildSystemPrompt(tools: ToolDefinition[], cwd: string): string 
     "",
     "Guidelines:",
     ...guidelines.map((g) => `- ${g}`),
+    // With no skills discovered this section is absent and the prompt is
+    // byte-identical to the gated golden — same rule as the task tool.
+    ...(skills.length > 0
+      ? [
+          "",
+          "Skills (reusable instructions; load the full text with the skill tool):",
+          ...skills.map((s) => `- ${s.name}: ${s.description}`),
+        ]
+      : []),
     "",
     `Current working directory: ${cwd}`,
   ].join("\n");

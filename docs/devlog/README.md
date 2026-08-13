@@ -28,6 +28,11 @@ Entries present here:
   add and fire, the two-file ledger, the read-only preset built on a
   classifier ported from the Go sibling (with the holes found porting
   it), and why serve ships without HTTP.
+- `2026-08-13-m8-skills.org` — SKILL.md skills, shipped the day dsh
+  launched and reading the same directories it reads: one skills dir,
+  two harnesses. The measured cost of the index (~149 tokens fixed,
+  ~25 per skill), the byte-frozen-prompt constraint that shaped the
+  design, and why MCP still shipped nothing.
 
 Entries for M1-M3 are held back for now: they are written around a
 private comparison harness (a proprietary agent CLI retargeted to

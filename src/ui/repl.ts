@@ -28,6 +28,7 @@ import { addUsage, zeroUsage, type Message, type Usage } from "../provider/types
 import { compactThreshold } from "../engine/compact";
 import { MODELS } from "../provider/catalog";
 import { renderReport, type SubagentManager } from "../engine/subagent";
+import type { SkillIndexEntry } from "../engine/prompt";
 import type { ToolDefinition } from "../tools/index";
 import { Session } from "../session/session";
 import type { SessionStore } from "../session/store";
@@ -53,6 +54,8 @@ export type ReplOptions = {
    * differencing cumulative totals. */
   makeManager: () => SubagentManager;
   makeTools: (mgr: SubagentManager) => ToolDefinition[];
+  /** Discovered skill index; fixed for the life of the process. */
+  skills: SkillIndexEntry[];
   model: string;
   cwd: string;
   apiKey: string;
@@ -232,6 +235,7 @@ export class Repl {
         apiKey: this.opts.apiKey,
         baseUrl: this.opts.baseUrl,
         tools: this.opts.makeTools(manager),
+        skills: this.opts.skills,
         maxTurns: this.opts.maxTurns,
         contextBudget: this.opts.contextBudget,
         signal: ac.signal,
@@ -404,7 +408,12 @@ export class Repl {
             `  ${dim("context ")} ${formatCount(used)} / ${formatCount(threshold)} tokens (${pct}%)\n` +
             `  ${dim("turns   ")} ${turns}\n` +
             `  ${dim("cost    ")} ${this.totalsLine()}\n` +
-            `  ${dim("tools   ")} ${this.toolNames.join(", ")}\n\n`,
+            `  ${dim("tools   ")} ${this.toolNames.join(", ")}\n` +
+            `  ${dim("skills  ")} ${
+              this.opts.skills.length > 0
+                ? this.opts.skills.map((s) => s.name).join(", ")
+                : "(none discovered)"
+            }\n\n`,
         );
         return false;
       }

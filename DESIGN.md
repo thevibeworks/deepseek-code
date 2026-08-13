@@ -178,11 +178,21 @@ Small and stable — the schema is part of the cached prefix:
 
 ## Skills
 
-- Discovery: `./.agents/skills/`, `~/.agents/skills/` (cross-client
-  convention), plus `./.dsc/skills/`, `~/.dsc/skills/`.
+- Discovery (SHIPPED, devlog 2026-08-13-m8-skills.org):
+  `<project>/.dsc/skills/`, `<project>/.agents/skills/`,
+  `~/.dsc/skills/`, `~/.agents/skills/` — precedence in that order on a
+  name collision (project beats home, harness-native beats the shared
+  convention). That mirrors dsh's root ranks (its `.dsh/skills` at the
+  positions our `.dsc/skills` holds), so both harnesses resolve the
+  same collision the same way. Project root = nearest ancestor with
+  `.git`, else cwd — also the dsh rule.
 - SKILL.md with frontmatter; progressive disclosure (index line in
   prompt, body loaded on invoke) — skill bodies never sit in the stable
   prefix, only the one-line index does (prefix stays small AND stable).
+  Shipped as the `skill` tool: static schema (no name enum — names live
+  in the index, so adding a skill never rewrites the tool bytes),
+  registered only when discovery found something; zero skills = the
+  gated default prompt, byte-identical.
 - v2: skill versioning + per-skill eval records (the "skills with
   evidence" idea from the research docs).
 
@@ -300,7 +310,13 @@ done right).
    appends a request event, only the daemon fires. The read preset
    carries a ported classifyBash (docs/research/deepseek-pi-sibling.md)
    so "read-only scheduled run" is enforced, not advisory prose.
-7. Skills + MCP client.
+7. Skills + MCP client. Skills SHIPPED (as M8 in the devlog numbering —
+   /seek took the M6 slot and the scheduler M7, so this item kept its
+   build-order number but not its milestone number; see
+   docs/devlog/2026-08-13-m8-skills.org). Discovery reads the same
+   roots dsh reads: one skills directory, two harnesses. MCP remains
+   OUT of core per the Round 3 amendment below; nothing shipped here
+   changes that.
 
 Eval harness (EVAL.md, separate task) develops in parallel from milestone
 1 — it gates every milestone exit.

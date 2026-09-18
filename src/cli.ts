@@ -25,7 +25,7 @@
 // Key resolution: $DEEPSEEK_API_KEY, else ~/.dsc/key.
 
 import { resolve } from "node:path";
-import { DEFAULT_BASE_URL, DEFAULT_MODEL, MODELS } from "./provider/catalog";
+import { CURRENT_MODELS, DEFAULT_BASE_URL, DEFAULT_MODEL, MODELS } from "./provider/catalog";
 import { resolveApiKey } from "./config";
 import { schedulerCli } from "./scheduler/cli";
 import { addUsage } from "./provider/types";
@@ -57,7 +57,7 @@ const USAGE = `usage:
   dsc job|ps|serve             scheduled jobs (dsc job for details)
   dsc skills                   discovered SKILL.md skills and their sources
 
-  --model NAME                 ${Object.keys(MODELS).join(" | ")}
+  --model NAME                 ${CURRENT_MODELS.join(" | ")} (default ${DEFAULT_MODEL})
   --cwd DIR                    working directory for the run
   --continue                   interactive: resume the latest session here
   --resume ID                  resume a specific session
@@ -111,7 +111,7 @@ if (promptIdx >= 0 && prompt === undefined) {
 
 const model = argValue("model") ?? process.env.DSC_MODEL ?? DEFAULT_MODEL;
 if (!MODELS[model]) {
-  console.error(`dsc: unknown model "${model}" (known: ${Object.keys(MODELS).join(", ")})`);
+  console.error(`dsc: unknown model "${model}" (known: ${CURRENT_MODELS.join(", ")})`);
   process.exit(2);
 }
 const cwd = resolve(argValue("cwd") ?? process.cwd());

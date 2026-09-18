@@ -43,6 +43,11 @@ export type StreamOpts = {
   maxAttempts?: number;
   /** Tool results to render as reclaimed stubs; set only at run boundaries. */
   reclaimIds?: Set<string>;
+  /** Send `thinking: {type: "disabled"}`. Thinking is on by default upstream
+   * and its tokens count against max_tokens, so a call whose cap is meant
+   * to bound the ANSWER must turn it off: deepseek-flash spent a whole
+   * 512-token cap on reasoning and returned no text (measured 2026-09-18). */
+  noThinking?: boolean;
 };
 
 const DEFAULT_MAX_TOKENS = 65_536;
@@ -107,6 +112,7 @@ export function buildPayload(opts: StreamOpts): Record<string, unknown> {
     stream: true,
     system: opts.system,
     tools: opts.tools,
+    ...(opts.noThinking === true ? { thinking: { type: "disabled" } } : {}),
     messages: toWire(opts.messages, opts.reclaimIds),
   };
 }

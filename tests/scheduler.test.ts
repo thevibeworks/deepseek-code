@@ -28,7 +28,7 @@ function job(over: Partial<JobSpec> = {}): JobSpec {
     id: "j1",
     prompt: "do the thing",
     cwd: dir,
-    model: "deepseek-v4-flash",
+    model: "deepseek-flash",
     tools: "read",
     trigger: { kind: "cron", expr: "* * * * *" },
     budget: { maxTurns: 5, maxTotalTokens: 100_000, maxWallMs: 60_000 },

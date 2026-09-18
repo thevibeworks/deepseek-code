@@ -2,7 +2,7 @@
 // Matrix runner: (task, adapter, model) x N -> runs.jsonl.
 // Usage:
 //   bun run.ts --tasks bugfix-slugify,feature-tdd --adapters dsc \
-//     --models deepseek-v4-flash --n 3
+//     --models deepseek-flash --n 3
 // Design: deepseek-code/EVAL.md. One run = fresh fixture copy -> headless
 // invocation -> dumb bash verifier -> metrics row. Sequential on purpose:
 // DeepSeek's prefix cache is time-sensitive and parallel runs would blur
@@ -51,13 +51,17 @@ const taskNames =
         .sort()
     : taskArg.split(",");
 const adapterNames = arg("adapters", "dsc").split(",");
-const models = arg("models", "deepseek-v4-flash").split(",");
+const models = arg("models", "deepseek-flash").split(",");
 const n = parseInt(arg("n", "1"), 10);
 
 const pricing = await Bun.file(join(EVAL_DIR, "pricing.json")).json();
+/** Off-peak cost on the card in force now (see pricing.json "unit"). */
 function costUsd(model: string, u: Usage | null): number | null {
-  const p = pricing.models[model];
-  if (!p || !u) return null;
+  const tier = pricing.tiers[model];
+  if (!tier || !u) return null;
+  const now = Date.now();
+  const card = pricing.cards.filter((c: { since: string }) => Date.parse(c.since) <= now).at(-1);
+  const p = card.rates[tier];
   return (u.inputFresh * p.input_miss + u.cacheRead * p.input_hit + u.output * p.output) / 1e6;
 }
 

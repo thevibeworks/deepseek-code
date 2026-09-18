@@ -11,7 +11,7 @@
 
 import type { AgentEvent } from "../engine/events";
 import type { Usage } from "../provider/types";
-import { MODELS } from "../provider/catalog";
+import { ratesAt } from "../provider/catalog";
 
 export type Style = (s: string) => string;
 
@@ -90,10 +90,11 @@ export function formatCount(n: number): string {
   return `${(n / 1_000_000).toFixed(2)}M`;
 }
 
-/** Cost in USD from the catalog's per-1M rates. The catalog is the single
- * pricing source; eval recomputes independently on purpose. */
-export function costUsd(usage: Usage, model: string): number {
-  const p = MODELS[model]?.pricing;
+/** Cost in USD from the catalog's per-1M rates on the card (and peak or
+ * off-peak period) in force at `at`. The catalog is the single pricing
+ * source; eval recomputes independently on purpose. */
+export function costUsd(usage: Usage, model: string, at: Date = new Date()): number {
+  const p = ratesAt(model, at);
   if (p === undefined) return 0;
   return (
     (usage.inputFresh * p.inputMiss + usage.cacheRead * p.inputHit + usage.output * p.output) /

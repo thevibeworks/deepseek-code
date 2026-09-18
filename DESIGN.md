@@ -115,7 +115,9 @@ eval/            harness lives with the code it gates (see EVAL.md)
   usable input / 1M advertised / 384k output; effort levels
   off|low|high|xhigh|max; budget math always uses 616k.
 - Flash-first, pro-escalation: flash is the default executor; `--model`
-  pins. A session transcript is pinned to ONE model (Round 4 rule); the
+  pins. (Since V4.1 Flash, 2026-09-10, `deepseek-flash` is the default
+  and pro is no longer the stronger tier on DeepSeek's own agent
+  benchmarks; see README "Models". Escalation stays open as a mechanism.) A session transcript is pinned to ONE model (Round 4 rule); the
   `/pro` escalation mechanism — same-transcript switch vs
   evidence-packet handoff — is an open question, eval-gated at M4.
 - Usage accounting from provider `usage` only; cost computed from our own
@@ -201,8 +203,8 @@ Small and stable — the schema is part of the cached prefix:
 - `task` tool: spawn/wait/result/cancel lifecycle (DeepSeek-TUI shape),
   parallel by default, results return as compressed reports.
 - Roles as prompt+permission presets: explorer (read-only, flash),
-  implementer (write, flash), reviewer (read-only, pro), tester (bash,
-  flash). Verified pattern: bounded sub-contexts beat one giant context.
+  implementer (write, flash), reviewer (read-only, pro until 2026-09-10,
+  flash since), tester (bash, flash). Verified pattern: bounded sub-contexts beat one giant context.
 - Every sub-agent gets a budget envelope: max tokens, max turns, max
   wall-clock. A looping child dies quietly; the parent gets a partial
   report. (Capability-token idea from research, minimum viable form.)

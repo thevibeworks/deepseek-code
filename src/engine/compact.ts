@@ -146,6 +146,9 @@ export async function summarize(
     tools: [],
     messages: [...sanitizeForSummary(messages), ask],
     maxTokens: opts.maxTokens ?? SUMMARY_MAX_TOKENS,
+    // The cap bounds the summary; with thinking on, reasoning eats it and
+    // the call returns no text, silently degrading to the emergency summary.
+    noThinking: true,
     signal: opts.signal,
     maxAttempts: 2,
   });

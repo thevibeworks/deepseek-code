@@ -59,7 +59,7 @@ const fastBaseUrl = `http://localhost:${server.port}/fast`;
 afterAll(() => server.stop(true));
 
 const base = {
-  model: "deepseek-v4-flash",
+  model: "deepseek-flash",
   cwd: process.cwd(),
   apiKey: "test",
   baseUrl,

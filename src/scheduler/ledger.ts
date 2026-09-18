@@ -18,7 +18,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync, appendFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
-import { MODELS } from "../provider/catalog";
+import { CURRENT_MODELS, MODELS } from "../provider/catalog";
 import { parseCron } from "./cron";
 
 export type ToolPreset = "read" | "write";
@@ -101,7 +101,7 @@ export function validateJobSpec(spec: JobSpec): string[] {
   if (!isAbsolute(spec.cwd)) problems.push(`cwd "${spec.cwd}" must be absolute`);
   else if (!existsSync(spec.cwd)) problems.push(`cwd "${spec.cwd}" does not exist`);
   if (MODELS[spec.model] === undefined) {
-    problems.push(`unknown model "${spec.model}" (known: ${Object.keys(MODELS).join(", ")})`);
+    problems.push(`unknown model "${spec.model}" (known: ${CURRENT_MODELS.join(", ")})`);
   }
   if (spec.tools !== "read" && spec.tools !== "write") {
     problems.push(`tools must be "read" or "write", got "${spec.tools}"`);

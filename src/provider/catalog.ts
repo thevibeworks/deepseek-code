@@ -70,11 +70,12 @@ export const CARDS: Card[] = [
   },
   {
     // V4.1 Flash, 2026-09-10: Flash cut on every item, Pro unchanged.
-    // The instant is INFERRED: our docs mirror read the old card at 04:50
-    // UTC and the new one at 11:27 UTC that day. 11:00 is the last whole
-    // hour between, so a call in the gap can only be overstated.
+    // "New pricing takes effect at 04:00 UTC on Sept 10, 2026" -- DeepSeek's
+    // release note (news260910; 12:00 Beijing in the Chinese one). The
+    // pricing page itself still showed the old card at 04:50 UTC, so a date
+    // read off the page lags the bill.
     label: "V4.1",
-    since: new Date("2026-09-10T11:00:00Z"),
+    since: new Date("2026-09-10T04:00:00Z"),
     timeOfUse: true,
     rates: { flash: { inputHit: 0.003, inputMiss: 0.15, output: 0.6 }, pro: V4_PRO },
   },

@@ -2,7 +2,7 @@
 // roundtrip/rebuild, resume usage-zeroing (the autocompact-spiral
 // trap). Live compaction behavior is exercised by the compaction eval.
 
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -14,8 +14,10 @@ import {
   emergencySummary,
   retainedTail,
   sanitizeForSummary,
+  summarize,
   TASK_PIN_PREFIX,
 } from "../src/engine/compact";
+import { buildPayload } from "../src/provider/client";
 import { SessionStore } from "../src/session/store";
 import type { AssistantMessage, Message } from "../src/provider/types";
 
@@ -123,7 +125,7 @@ describe("SessionStore", () => {
   test("roundtrip, compaction rebuild, and resume usage-zeroing", () => {
     const dir = mkdtempSync(join(tmpdir(), "dsc-store-test-"));
     const store = new SessionStore(join(dir, "s.db"));
-    const meta = store.create("deepseek-v4-flash", "/work");
+    const meta = store.create("deepseek-flash", "/work");
 
     for (const m of transcript) store.appendMessage(meta.id, m);
     const plain = store.rebuildView(meta.id);
@@ -183,5 +185,50 @@ describe("compactedView", () => {
     ];
     const s = emergencySummary(withPin);
     expect(s).toContain("(none recorded)");
+  });
+});
+
+// Thinking is on by default upstream and bills against max_tokens. With it
+// on, deepseek-flash spent a 512-token summary cap entirely on reasoning
+// and returned no text (measured 2026-09-18), so compaction fell back to
+// the emergency summary without saying so. The summary call must ask for
+// no thinking; every other call must not change its bytes.
+describe("summary call and thinking", () => {
+  const bodies: any[] = [];
+  const reply = [
+    { type: "message_start", message: { usage: { input_tokens: 10, output_tokens: 0 } } },
+    { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
+    { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "the summary" } },
+    { type: "content_block_stop", index: 0 },
+    { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 3 } },
+    { type: "message_stop" },
+  ]
+    .map((e) => `event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`)
+    .join("");
+  const server = Bun.serve({
+    port: 0,
+    fetch: async (req) => {
+      bodies.push(await req.json());
+      return new Response(reply, { headers: { "content-type": "text/event-stream" } });
+    },
+  });
+  afterAll(() => server.stop(true));
+
+  test("summarize() sends thinking disabled and keeps its cap", async () => {
+    const out = await summarize(transcript, undefined, {
+      apiKey: "test",
+      baseUrl: `http://localhost:${server.port}`,
+      model: "deepseek-flash",
+      maxTokens: 512,
+    });
+    expect(out).toEqual({ summary: "the summary", llm: true });
+    expect(bodies.at(-1).thinking).toEqual({ type: "disabled" });
+    expect(bodies.at(-1).max_tokens).toBe(512);
+  });
+
+  test("an ordinary turn carries no thinking key", () => {
+    const body = buildPayload({ apiKey: "k", baseUrl: "u", model: "deepseek-flash", system: "s", tools: [], messages: [] });
+    expect("thinking" in body).toBe(false);
+    expect(Object.keys(body).at(-1)).toBe("messages");
   });
 });

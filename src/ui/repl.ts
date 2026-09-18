@@ -26,7 +26,7 @@
 import { createInterface, type Interface } from "node:readline";
 import { addUsage, zeroUsage, type Message, type Usage } from "../provider/types";
 import { compactThreshold } from "../engine/compact";
-import { MODELS } from "../provider/catalog";
+import { CURRENT_MODELS, MODELS } from "../provider/catalog";
 import { renderReport, type SubagentManager } from "../engine/subagent";
 import type { SkillIndexEntry } from "../engine/prompt";
 import type { ToolDefinition } from "../tools/index";
@@ -424,11 +424,11 @@ export class Repl {
 
       case "/model": {
         if (arg === "") {
-          this.write(`  ${cyan(this.model)}  ${dim(`(known: ${Object.keys(MODELS).join(", ")})`)}\n\n`);
+          this.write(`  ${cyan(this.model)}  ${dim(`(known: ${CURRENT_MODELS.join(", ")})`)}\n\n`);
           return false;
         }
         if (MODELS[arg] === undefined) {
-          this.write(`  ${red(`unknown model "${arg}"`)} ${dim(`(known: ${Object.keys(MODELS).join(", ")})`)}\n\n`);
+          this.write(`  ${red(`unknown model "${arg}"`)} ${dim(`(known: ${CURRENT_MODELS.join(", ")})`)}\n\n`);
           return false;
         }
         this.model = arg;

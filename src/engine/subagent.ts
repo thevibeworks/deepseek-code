@@ -7,8 +7,10 @@
 // Budget envelopes: max turns / max total tokens / max wall-clock. A
 // looping child dies quietly; the parent gets a partial report.
 // Children are model-pinned per role (Round 4 rule #1: one transcript,
-// one model) — a pro reviewer is a fresh pro context, never a mid-
-// transcript model switch.
+// one model) — a role on another model gets a fresh context, never a mid-
+// transcript model switch. Every role runs deepseek-flash since V4.1
+// Flash (2026-09-10); the reviewer ran pro before that. The benchmark
+// comparison behind the switch is in README.md, "Models".
 
 import type { Message, Usage } from "../provider/types";
 import { addUsage, zeroUsage } from "../provider/types";
@@ -44,9 +46,9 @@ const READ_ONLY_TOOLS = [readTool, bashTool];
 export const ROLES: Record<RoleName, Role> = {
   explorer: {
     name: "explorer",
-    description: "read-only investigation (fast model)",
+    description: "read-only investigation",
     tools: READ_ONLY_TOOLS,
-    model: "deepseek-v4-flash",
+    model: "deepseek-flash",
     preamble:
       "You are an explorer sub-agent: investigate the codebase to answer " +
       "the task below. Do not modify any files.",
@@ -54,9 +56,9 @@ export const ROLES: Record<RoleName, Role> = {
   },
   implementer: {
     name: "implementer",
-    description: "makes a code change and verifies it (fast model)",
+    description: "makes a code change and verifies it",
     tools: [readTool, bashTool, editTool, writeTool],
-    model: "deepseek-v4-flash",
+    model: "deepseek-flash",
     preamble:
       "You are an implementer sub-agent: make the change described in the " +
       "task below, verify it, and report exactly what you changed.",
@@ -64,9 +66,9 @@ export const ROLES: Record<RoleName, Role> = {
   },
   reviewer: {
     name: "reviewer",
-    description: "read-only code review (strong model)",
+    description: "read-only code review",
     tools: READ_ONLY_TOOLS,
-    model: "deepseek-v4-pro",
+    model: "deepseek-flash",
     preamble:
       "You are a reviewer sub-agent: read the code relevant to the task " +
       "below and report concrete problems (bugs, missed edge cases, broken " +
@@ -75,9 +77,9 @@ export const ROLES: Record<RoleName, Role> = {
   },
   tester: {
     name: "tester",
-    description: "runs tests/commands and reports results (fast model)",
+    description: "runs tests/commands and reports results",
     tools: READ_ONLY_TOOLS,
-    model: "deepseek-v4-flash",
+    model: "deepseek-flash",
     preamble:
       "You are a tester sub-agent: run the commands or tests named in the " +
       "task below and report the results. Do not edit source files.",

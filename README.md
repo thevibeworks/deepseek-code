@@ -1,9 +1,8 @@
 # deepseek-code (`dsc`)
 
-A DeepSeek-native coding agent for the v4 flash/pro series (pro is GA
-as of 2026-08-12, model version DeepSeek-V4-Pro-0813 — same
-`deepseek-v4-pro` model ID). TypeScript, Bun, zero runtime
-dependencies.
+A DeepSeek-native coding agent. Defaults to DeepSeek-V4.1-Flash
+(`deepseek-flash`, released 2026-09-10); `deepseek-v4-pro` stays
+selectable. TypeScript, Bun, zero runtime dependencies.
 
 Not a Claude Code clone and not a general multi-provider harness. Being
 DeepSeek-only is the design: one protocol state machine (the
@@ -83,7 +82,7 @@ printf 'read src/parse.js\nnow fix the regex\n/cost\n' | bun src/cli.ts
 Useful flags:
 
 ```
---model deepseek-v4-flash|deepseek-v4-pro
+--model deepseek-flash|deepseek-v4-pro   (default deepseek-flash)
 --cwd DIR                 working directory for the run
 --continue                interactive: resume the latest session here
 --save / --resume ID      persist the session to SQLite (~/.dsc/)
@@ -94,13 +93,33 @@ Useful flags:
 --verbose                 -p only; stream progress to stderr
 ```
 
-Both v4 models are 1M context / 384K max output and can be picked
-anywhere a model is chosen (`--model`, `/model` in interactive,
-`dsc job add --model`). Flash is the default executor; pro is the
-stronger tier and the right pick for planning and review passes — the
-built-in `reviewer` sub-agent role already runs on it. V4-Pro GA ships
-with thinking on by default upstream, and reasoning tokens count
-against `max_tokens`, which dsc's budgets already account for.
+## Models
+
+| name | model | off-peak USD / 1M (hit / miss / out) |
+| --- | --- | --- |
+| `deepseek-flash` (default) | DeepSeek-V4.1-Flash | 0.003 / 0.15 / 0.60 |
+| `deepseek-v4-pro` | DeepSeek-V4-Pro-0813 | 0.022 / 0.66 / 1.98 |
+
+Peak (01:00-04:00 and 06:00-10:00 UTC, Monday to Friday) costs double;
+`/cost` and the turn footer price usage on the card and period in force
+when they print. Both are 1M context / 384K max output and can be
+picked anywhere a model is chosen (`--model`, `/model` in interactive,
+`dsc job add --model`).
+
+Flash is the default and every built-in sub-agent role runs on it,
+including `reviewer`, which ran pro until V4.1. The reason is
+DeepSeek's own changelog: on the benchmarks both its 2026-09-10 (V4.1
+Flash) and 2026-08-13 (V4 Pro GA) entries report, Flash scores
+Terminal Bench 2.1 90.6 vs 87.9, NL2Repo 65.4 vs 61.5, CyberGym 88.1 vs
+83.3 and HLE with tools 63.9 vs 60.0; HLE without tools goes the other
+way, 36.8 vs 42.7. We have not re-run our own eval on V4.1 yet.
+
+The retired names `deepseek-v4-flash` and `deepseek-v4-flash-vision-exp`
+are still accepted, as the API still accepts them: they are served by
+V4.1 Flash and billed at the Flash price. Thinking is on by default
+upstream, and reasoning tokens count against `max_tokens` (V4.1 Flash
+was measured spending a whole 600-token budget on reasoning), which
+dsc's budgets already account for.
 
 ## What is actually built
 
@@ -161,7 +180,7 @@ pinned benchmark suite. Numbers decide; taste does not. See
 the raw rows behind them.
 
 ```bash
-bun eval/run.ts --tasks all --adapters dsc --models deepseek-v4-flash --n 3
+bun eval/run.ts --tasks all --adapters dsc --models deepseek-flash --n 3
 bun eval/report.ts
 ```
 

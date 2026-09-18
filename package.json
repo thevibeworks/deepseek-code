@@ -3,7 +3,7 @@
   "version": "0.7.0",
   "private": false,
   "type": "module",
-  "description": "DeepSeek-native coding agent for the v4 flash/pro series. TypeScript/Bun, zero runtime dependencies.",
+  "description": "DeepSeek-native coding agent, defaulting to DeepSeek-V4.1-Flash (deepseek-flash). TypeScript/Bun, zero runtime dependencies.",
   "scripts": {
     "test": "bun test tests",
     "eval": "bun eval/run.ts",

@@ -19,7 +19,7 @@ function payloadString(messages: Message[]): string {
     buildPayload({
       apiKey: "k",
       baseUrl: "http://x",
-      model: "deepseek-v4-flash",
+      model: "deepseek-flash",
       system: buildSystemPrompt(tools, "/work"),
       tools: toWireTools(tools),
       messages,

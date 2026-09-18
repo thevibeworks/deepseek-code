@@ -16,11 +16,11 @@ function makeRepl(): { repl: Repl; output: () => string; store: SessionStore } {
   const chunks: string[] = [];
   const repl = new Repl({
     store,
-    session: Session.create(store, "deepseek-v4-flash", "/work"),
+    session: Session.create(store, "deepseek-flash", "/work"),
     makeManager: () => new SubagentManager({ apiKey: "k", baseUrl: "http://x", cwd: "/work" }),
     makeTools: () => [readTool, bashTool],
     skills: [{ name: "release-notes", description: "Draft release notes." }],
-    model: "deepseek-v4-flash",
+    model: "deepseek-flash",
     cwd: "/work",
     apiKey: "k",
     baseUrl: "http://x",
@@ -51,7 +51,7 @@ describe("/status", () => {
     expect(leave).toBe(false);
     const out = output();
     expect(out).toContain("read, bash");
-    expect(out).toContain("deepseek-v4-flash");
+    expect(out).toContain("deepseek-flash");
     expect(out).toContain("context");
     expect(out).toContain("release-notes");
   });

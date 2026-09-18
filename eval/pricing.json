@@ -1,9 +1,36 @@
 {
-  "source": "thevibeworks/deepseek-docs content/en/quick_start/pricing.md (fetched 2026-08-02)",
-  "unit": "USD per 1M tokens, regular (off-peak) rates",
-  "note": "DeepSeek announced a coming peak-hour policy: 2x all items during 9:00-12:00 and 14:00-18:00 Beijing time. Not yet in effect; runs.jsonl rows record regular-rate cost only. Re-check the pricing doc before trusting absolute dollar figures.",
-  "models": {
-    "deepseek-v4-flash": { "input_hit": 0.0028, "input_miss": 0.14, "output": 0.28 },
-    "deepseek-v4-pro": { "input_hit": 0.003625, "input_miss": 0.435, "output": 0.87 }
-  }
+  "source": "thevibeworks/deepseek-docs content/en/quick_start/pricing.md (re-read 2026-09-18) and content/en/updates.md",
+  "unit": "USD per 1M tokens. Cards from 2026-08-16 on are OFF-PEAK rates; peak (01:00-04:00 and 06:00-10:00 UTC, Mon-Fri) is 2x. runs.jsonl cost_usd is always computed on the off-peak rate of the card in force when the row was written, so rows from different hours compare.",
+  "tiers": {
+    "deepseek-flash": "flash",
+    "deepseek-v4-pro": "pro",
+    "deepseek-v4-flash": "flash",
+    "deepseek-v4-flash-vision-exp": "flash"
+  },
+  "cards": [
+    {
+      "since": "1970-01-01T00:00:00Z",
+      "label": "flat card published 2026-08-02, no peak",
+      "rates": {
+        "flash": { "input_hit": 0.0028, "input_miss": 0.14, "output": 0.28 },
+        "pro": { "input_hit": 0.003625, "input_miss": 0.435, "output": 0.87 }
+      }
+    },
+    {
+      "since": "2026-08-16T16:00:00Z",
+      "label": "V4 GA repricing (changelog 2026-08-13)",
+      "rates": {
+        "flash": { "input_hit": 0.007, "input_miss": 0.22, "output": 0.66 },
+        "pro": { "input_hit": 0.022, "input_miss": 0.66, "output": 1.98 }
+      }
+    },
+    {
+      "since": "2026-09-10T11:00:00Z",
+      "label": "V4.1 Flash (changelog 2026-09-10); instant inferred, see src/provider/catalog.ts",
+      "rates": {
+        "flash": { "input_hit": 0.003, "input_miss": 0.15, "output": 0.6 },
+        "pro": { "input_hit": 0.022, "input_miss": 0.66, "output": 1.98 }
+      }
+    }
+  ]
 }

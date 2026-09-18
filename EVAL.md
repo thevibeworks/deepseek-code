@@ -86,7 +86,7 @@ lower hit% while improving quality and total cost).
 
 ## Workflow
 
-- `bun eval/run.ts --tasks all --adapters dsc --models deepseek-v4-flash
+- `bun eval/run.ts --tasks all --adapters dsc --models deepseek-flash
   --n 3` -> appends runs.jsonl
 - `bun eval/report.ts` -> matrix like evot's README table.
 - CI (dsc repo): quick-tag tasks on every engine PR; full matrix

@@ -72,9 +72,9 @@ describe("SubagentManager", () => {
     mgr.spawn("implementer", "z");
     const [explorer, reviewer, implementer] = stub.calls;
     expect(explorer.tools.map((t) => t.name)).toEqual(["read", "bash"]);
-    expect(explorer.model).toBe("deepseek-v4-flash");
+    expect(explorer.model).toBe("deepseek-flash");
     expect(explorer.maxTurns).toBe(ROLES.explorer.budget.maxTurns);
-    expect(reviewer.model).toBe("deepseek-v4-pro");
+    expect(reviewer.model).toBe("deepseek-flash");
     expect(implementer.tools.map((t) => t.name)).toEqual(["read", "bash", "edit", "write"]);
     // Role preamble + task + report contract ride in the USER prompt.
     expect(explorer.prompt).toContain("explorer sub-agent");

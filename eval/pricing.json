@@ -25,8 +25,8 @@
       }
     },
     {
-      "since": "2026-09-10T11:00:00Z",
-      "label": "V4.1 Flash (changelog 2026-09-10); instant inferred, see src/provider/catalog.ts",
+      "since": "2026-09-10T04:00:00Z",
+      "label": "V4.1 Flash (changelog 2026-09-10); effective 04:00 UTC per the release note, see src/provider/catalog.ts",
       "rates": {
         "flash": { "input_hit": 0.003, "input_miss": 0.15, "output": 0.6 },
         "pro": { "input_hit": 0.022, "input_miss": 0.66, "output": 1.98 }

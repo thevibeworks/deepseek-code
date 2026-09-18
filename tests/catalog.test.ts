@@ -42,12 +42,14 @@ describe("dated cards", () => {
     expect(ratesAt("deepseek-v4-flash", at("2026-09-09T02:00:00Z"))?.inputMiss).toBe(0.44); // Wed peak
   });
 
-  test("V4.1 Flash card from 2026-09-10 11:00 UTC; pro unchanged across it", () => {
-    const before = at("2026-09-10T10:59:00Z");
-    const after = at("2026-09-10T11:00:00Z");
-    expect(ratesAt("deepseek-flash", before)).toEqual({ inputHit: 0.007, inputMiss: 0.22, output: 0.66 });
+  test("V4.1 Flash card from 2026-09-10 04:00 UTC; pro unchanged across it", () => {
+    // 03:59 is inside the 01-04 peak window, 04:00 is outside it, so this
+    // also proves the card and the tariff switch independently.
+    const before = at("2026-09-10T03:59:00Z");
+    const after = at("2026-09-10T04:00:00Z");
+    expect(ratesAt("deepseek-flash", before)).toEqual({ inputHit: 0.014, inputMiss: 0.44, output: 1.32 });
+    expect(ratesAt("deepseek-v4-pro", before)).toEqual({ inputHit: 0.044, inputMiss: 1.32, output: 3.96 });
     expect(ratesAt("deepseek-flash", after)).toEqual({ inputHit: 0.003, inputMiss: 0.15, output: 0.6 });
-    expect(ratesAt("deepseek-v4-pro", before)).toEqual(ratesAt("deepseek-v4-pro", after));
     expect(ratesAt("deepseek-v4-pro", after)).toEqual({ inputHit: 0.022, inputMiss: 0.66, output: 1.98 });
   });
 
